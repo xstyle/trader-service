@@ -2,7 +2,7 @@ import mongoose, { Document, Model, Types } from 'mongoose'
 
 export const model_name = 'List'
 
-const ListSchema = new mongoose.Schema<ListDocument>({
+const ListSchema = new mongoose.Schema<ListDocument, ListModel>({
     name: {
         type: String,
         required: true

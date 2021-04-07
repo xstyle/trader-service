@@ -6,9 +6,9 @@ import { model as Ticker } from '../ticker/ticker.model'
 
 export const model_name = 'Watchdog'
 
-const TELEGRAM_ID: string = process.env.TELEGRAM_ID
+const TELEGRAM_ID: string = process.env.TELEGRAM_ID || ""
 
-const WatchdogSchema = new Schema<WatchDogDocument>({
+const WatchdogSchema = new Schema<WatchDogDocument, WatchDogModel>({
     figi: {
         type: String,
         unique: true,

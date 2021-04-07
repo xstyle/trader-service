@@ -1,10 +1,14 @@
-import { MoneyAmount, Operation, OperationStatus, OperationTrade, OperationTypeWithCommission, Order, OrderStatus } from '@tinkoff/invest-openapi-js-sdk'
+import { MoneyAmount, Operation, OperationStatus, OperationTrade, OperationTypeWithCommission, OrderStatus } from '@tinkoff/invest-openapi-js-sdk'
 import moment from 'moment'
 import mongoose, { Document, Model, Schema, Types } from 'mongoose'
 import api from '../../utils/openapi'
 export const model_name = 'LimitOrder'
 
-const LimitOrderSchema = new Schema<LimitOrderDocument>({
+interface MyOperation extends Operation {
+    quantityExecuted: number
+}
+
+const LimitOrderSchema = new Schema<LimitOrderDocument, LimitOrderModel>({
     orderId: {
         type: String,
         required: true
@@ -119,7 +123,6 @@ LimitOrderSchema.index({ collections: 1 })
 LimitOrderSchema.index({ collections: 1, status: 1 })
 
 LimitOrderSchema.statics.findOrCreate = async function (
-    this: LimitOrderModel,
     id: string,
     date: string
 ): Promise<LimitOrderDocument> {
@@ -130,7 +133,6 @@ LimitOrderSchema.statics.findOrCreate = async function (
 }
 
 LimitOrderSchema.statics.findOrCreateByOperation = async function (
-    this: LimitOrderModel,
     operation: Operation
 ): Promise<LimitOrderDocument> {
     const order = await this.findOne({ orderId: operation.id })
@@ -139,7 +141,6 @@ LimitOrderSchema.statics.findOrCreateByOperation = async function (
 }
 
 LimitOrderSchema.statics.import = async function (
-    this: LimitOrderModel,
     id: string,
     date: string
 ): Promise<LimitOrderDocument | void> {
@@ -147,14 +148,7 @@ LimitOrderSchema.statics.import = async function (
     if (operation) return this.createByOperation(operation)
 }
 
-interface MyOperation extends Operation {
-    quantityExecuted: number
-}
-
-LimitOrderSchema.statics.createByOperation = async function (
-    this: LimitOrderModel,
-    operation: MyOperation
-) {
+LimitOrderSchema.statics.createByOperation = async function (operation: MyOperation) {
     return this.create({
         orderId: operation.id,
         figi: operation.figi,
@@ -173,7 +167,6 @@ LimitOrderSchema.statics.createByOperation = async function (
 }
 
 LimitOrderSchema.statics.load = async function (
-    this: LimitOrderModel,
     id: string,
     date: string
 ): Promise<MyOperation | void> {
@@ -186,43 +179,43 @@ LimitOrderSchema.statics.load = async function (
     return operations.find(operation => operation.id === id) as MyOperation
 }
 
-LimitOrderSchema.methods.addCollection = async function (
-    this: LimitOrderDocument,
-    collection: Types.ObjectId
-) {
+LimitOrderSchema.methods.addCollection = async function (collection: Types.ObjectId): Promise<LimitOrderDocument> {
     this.date
     this.collections.push(collection)
     return this.save()
 }
 
-LimitOrderSchema.methods.removeCollection = async function (
-    this: LimitOrderDocument,
-    collection: Types.ObjectId
-): Promise<LimitOrderDocument> {
+LimitOrderSchema.methods.removeCollection = async function (collection: Types.ObjectId): Promise<LimitOrderDocument> {
     this.collections.pull(collection)
     return this.save()
 }
 
-LimitOrderSchema.methods.cancel = async function (
-    this: LimitOrderDocument
-): Promise<void> {
+LimitOrderSchema.methods.cancel = async function (): Promise<void> {
     await api.cancelOrder({ orderId: this.orderId })
     await this.sync()
 }
 
-LimitOrderSchema.methods.sync = async function (this: LimitOrderDocument): Promise<LimitOrderDocument> {
+LimitOrderSchema.methods.sync = async function (): Promise<LimitOrderDocument> {
     const operation = await model.load(this.orderId, this.createdAt.toISOString())
     if (operation) {
 
         this.executedLots = operation.quantityExecuted
         this.status = operation.status
         this.date = new Date(operation.date)
-        this.price = operation.price
+        this.price = operation.price || this.price
         this.commission = operation.commission
         this.payment = operation.payment
         this.currency = operation.currency
         this.trades = operation.trades as Types.Array<OperationTrade>
-        this.isSynced = (operation.payment > 0 && operation.commission && operation.commission.value && operation.trades.length > 0) || (this.status == "Decline") || (this.status == "Done")
+        this.isSynced = (
+            operation.payment > 0 &&
+            operation.commission &&
+            operation.commission.value &&
+            operation.trades &&
+            operation.trades.length > 0
+        ) ||
+            (this.status == "Decline") ||
+            (this.status == "Done")
         this.updatedAt = new Date()
 
         return this.save()

@@ -5,7 +5,7 @@ import { model as Order } from '../order/order.model'
 
 export const model_name = 'DaggerCatcher'
 
-const DaggerCatcherSchema = new Schema<DaggerCatcherDocument>({
+const DaggerCatcherSchema = new Schema<DaggerCatcherDocument, DaggerCatcherModel>({
     figi: {
         type: String,
         required: true,
@@ -45,17 +45,17 @@ DaggerCatcherSchema.methods.execute = async function (
     return order
 }
 
-interface DaggerCatcher {
+export interface DaggerCatcherType {
     figi: string;
     min: number;
     max: number;
 }
 
-interface DaggerCatcherDocument extends DaggerCatcher, Document {
+export interface DaggerCatcherDocument extends DaggerCatcherType, Document {
     execute(data: { price: number, operation: OperationType, lots: number }): Promise<PlacedLimitOrder>
 }
 
-interface DaggerCatcherModel extends Model<DaggerCatcherDocument> {
+export interface DaggerCatcherModel extends Model<DaggerCatcherDocument> {
 
 }
 

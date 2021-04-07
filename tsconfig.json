@@ -1,5 +1,7 @@
 {
-    "files": ["./src/index.ts"],
+    "include": [
+        "./src/**/*.ts"
+    ],
     "compilerOptions": {
         "target": "es6",
         "esModuleInterop": true,
@@ -8,5 +10,6 @@
         "sourceMap": true,
         "allowJs": false,
         "moduleResolution": "node",
+        "strictNullChecks": true
     },
 }

@@ -3,7 +3,7 @@ import { justRun as run, justStop as stop } from '../robot/robot.controller'
 
 export const model_name = 'State'
 
-const StateSchema = new Schema<StateDocument>({
+const StateSchema = new Schema<StateDocument, StateModel>({
     is_running: {
         type: Boolean,
         default: false,

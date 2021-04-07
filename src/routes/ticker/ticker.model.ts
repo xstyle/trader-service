@@ -4,7 +4,7 @@ import api from '../../utils/openapi'
 
 export const model_name = 'Ticker'
 
-const TickerSchema = new Schema<TickerDocument>({
+const TickerSchema = new Schema<TickerDocument, TickerModel>({
     figi: {
         type: String,
         unique: true,
@@ -30,11 +30,11 @@ interface Ticker {
     type: InstrumentType;
 }
 
-interface TickerDocument extends Ticker, Document {
+export interface TickerDocument extends Ticker, Document {
 
 }
 
-interface TickerModel extends Model<TickerDocument> {
+export interface TickerModel extends Model<TickerDocument> {
     getOrCreateTickerByFigiOrTicker(id: string): Promise<TickerDocument>
     getTickerByFigiOrTicker(id: string): Promise<TickerDocument | undefined>
     importTickerByFigiOrTicker(id: string): Promise<MarketInstrument>
@@ -52,10 +52,7 @@ TickerSchema.statics.getOrCreateTickerByFigiOrTicker = async function (
     return this.create(data)
 }
 
-TickerSchema.statics.getTickerByFigiOrTicker = async function (
-    this: TickerModel,
-    id: string
-) {
+TickerSchema.statics.getTickerByFigiOrTicker = async function (id: string) {
     const query = isFigi(id) ? { figi: id } : { ticker: id }
     return this.findOne(query)
 }
@@ -64,7 +61,7 @@ function isFigi(id: string): boolean {
     return id.length === 12
 }
 
-TickerSchema.statics.importTickerByFigiOrTicker = async function (id: string): Promise<MarketInstrument> {
+TickerSchema.statics.importTickerByFigiOrTicker = async function (id: string): Promise<MarketInstrument | null> {
     const query: InstrumentId = isFigi(id) ? { figi: id } : { ticker: id }
     return api.searchOne(query)
 }

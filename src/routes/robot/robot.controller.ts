@@ -1,10 +1,14 @@
 import { Candle, CandleResolution, CandleStreaming } from "@tinkoff/invest-openapi-js-sdk"
-import { RequestHandler } from "express"
-import { model as Robot } from "./robot.model"
 import { CronJob } from "cron"
+import { RequestHandler } from "express"
+import api from '../../utils/openapi'
+import bot from '../../utils/telegram'
+import { model as Order } from "../order/order.model"
+import { model as State } from '../state/state.model'
+import { model as Ticker } from '../ticker/ticker.model'
+import { model as Robot, RobotDocument } from "./robot.model"
 
-const TELEGRAM_ID: string = process.env.TELEGRAM_ID
-const Order = require('../order/order.model').model
+const TELEGRAM_ID: string = process.env.TELEGRAM_ID || ""
 
 export const index: RequestHandler = async (req, res, next) => {
     const {
@@ -25,9 +29,7 @@ export const index: RequestHandler = async (req, res, next) => {
     const robots = await query
 
     res.send(robots.map(robot => {
-        if (Robot.isLoaded(robot._id)) {
-            robot = Robot.getRobotByIdSync(robot._id)
-        }
+        robot = Robot.getRobotByIdSync(robot._id) || robot
         return robot.toObject()
     }))
 }
@@ -65,7 +67,7 @@ export const disable: RequestHandler = async (req, res, next) => {
     }
 }
 
-export const loader: RequestHandler = async (req, res, next) => {
+export const loader: RequestHandler<any, any, any, any, { robot?: RobotDocument }> = async (req, res, next) => {
     const { id } = req.params
     const robot = Robot.isLoaded(id) ? Robot.getRobotByIdSync(id) : await Robot.findById(id)
     if (!robot) return res.sendStatus(404)
@@ -108,8 +110,8 @@ export const sync: RequestHandler = async (req, res, next) => {
 
     const budget = orders.reduce((budget, order) => {
         console.log(JSON.stringify(order));
-        budget += order.payment
-        if (order.commission.value) budget += order.commission.value
+        budget += order.payment || 0
+        if (order.commission) budget += order.commission.value
         return budget
     }, 0)
     robot.shares_number = amount + robot.start_shares_number
@@ -127,9 +129,9 @@ export const reset: RequestHandler = async (req, res, next) => {
     }
 }
 
-export const checkOrders: RequestHandler = async (req, res, next) => {
+export const checkOrders: RequestHandler<{}, RobotDocument, {}, {}, { robot: RobotDocument }> = async (req, res, next) => {
+    const { robot } = res.locals
     try {
-        const { robot } = res.locals
         await robot.checkOrders()
         res.send(robot)
     } catch (error) {
@@ -190,8 +192,6 @@ export const remove: RequestHandler = async (req, res, next) => {
     res.json(robot)
 }
 
-import api from '../../utils/openapi'
-import bot from '../../utils/telegram'
 
 export const state: RequestHandler = async (req, res, next) => {
     res.json(await State.getState())
@@ -284,21 +284,17 @@ export async function justStop() {
 }
 
 const api_tickers: {
-    [id: string]: {
-        [id in CandleResolution]?: () => void
-    }
+    [id: string]: Partial<Record<CandleResolution, () => void>>
 } = {}
 
 type SubscriberType = {
-    cb(data: Candle): void,
+    cb(data: CandleStreaming): void,
     id: string
 }
 
 
 const subscribers: {
-    [id: string]: {
-        [id in CandleResolution]?: SubscriberType[]
-    }
+    [id: string]: Partial<Record<CandleResolution, SubscriberType[]>> | undefined
 } = {}
 
 function getRootSubscriber({ figi, interval }: { figi: string, interval: CandleResolution }) {
@@ -308,10 +304,11 @@ function getRootSubscriber({ figi, interval }: { figi: string, interval: CandleR
 }
 
 function getAllRootSubscribers() {
-    const root_subscribers = []
+    const root_subscribers: [string, CandleResolution][] = []
     for (const figi of Object.keys(api_tickers)) {
-        for (const interval of Object.keys(api_tickers[figi])) {
-            root_subscribers.push([figi, interval])
+        const test = api_tickers[figi]
+        for (const interval of Object.keys(test)) {
+            root_subscribers.push([figi, interval as CandleResolution])
         }
     }
     return root_subscribers
@@ -368,12 +365,10 @@ async function apiResubscribe() {
 }
 
 const last_data: {
-    [id: string]: {
-        [id in CandleResolution]?: CandleStreaming
-    }
+    [id: string]: { [id in CandleResolution]?: CandleStreaming } | undefined
 } = {}
 
-function tickerWasUpdated({ figi, interval }: { figi: string, interval: CandleResolution }) {
+function tickerWasUpdated({ figi, interval }: { figi: string, interval: CandleResolution }): (data: CandleStreaming) => void {
     return (data) => {
         setLastData({
             figi,
@@ -387,27 +382,29 @@ function tickerWasUpdated({ figi, interval }: { figi: string, interval: CandleRe
 }
 
 function getSubscribers({ figi, interval }: { figi: string, interval: CandleResolution }): SubscriberType[] {
-    if (!subscribers[figi]) return []
-    if (!subscribers[figi][interval]) return []
-    return subscribers[figi][interval]
+    const figisSubscriber = subscribers[figi]
+    if (!figisSubscriber) return []
+    const figiIntervalSubscribers = figisSubscriber[interval]
+    if (!figiIntervalSubscribers) return []
+    return figiIntervalSubscribers
 }
 
-function addSubscriber({ figi, interval, subscriber }: { figi: string, interval: CandleResolution, subscriber: SubscriberType}) {
-    if (!subscribers[figi]) subscribers[figi] = {}
-    if (!subscribers[figi][interval]) subscribers[figi][interval] = []
-    subscribers[figi][interval].push(subscriber)
+function addSubscriber({ figi, interval, subscriber }: { figi: string, interval: CandleResolution, subscriber: SubscriberType }) {
+    const figiSubscribers = subscribers[figi] || (subscribers[figi] = {})
+    const figiIntervalSubscribers = figiSubscribers[interval] || (figiSubscribers[interval] = [])
+    figiIntervalSubscribers.push(subscriber)
 }
 
 function getLastData({ figi, interval }: { figi: string, interval: CandleResolution }): CandleStreaming | undefined {
-    if (!last_data[figi]) return
-    if (!last_data[figi][interval]) return
-    return last_data[figi][interval]
+    const figisData = last_data[figi]
+    if (!figisData) return
+    if (!figisData[interval]) return
+    return figisData[interval]
 }
 
 function setLastData({ figi, interval, data }: { figi: string, interval: CandleResolution, data: CandleStreaming }) {
-    //console.log(`INSTRUMENT setLastData ${figi} ${interval}`, data)
-    if (!last_data[figi]) last_data[figi] = {}
-    last_data[figi][interval] = data
+    const figiLastData = last_data[figi] || (last_data[figi] = {})
+    figiLastData[interval] = data
 }
 
 export function subscribe({ _id, figi, interval }: { _id: string, figi: string, interval: CandleResolution }, cb: (data: CandleStreaming) => void) {
@@ -426,7 +423,7 @@ export function subscribe({ _id, figi, interval }: { _id: string, figi: string, 
         }
     })
 
-    const data: CandleStreaming = getLastData({ figi, interval })
+    const data: CandleStreaming | undefined = getLastData({ figi, interval })
     data && cb(data)
 }
 
@@ -445,11 +442,6 @@ export function unsubscribe({ figi, _id, interval }: { figi: string, _id: string
     if (subscribers.length === 0) apiUnsubscribe({ figi, interval })
 }
 
-exports.subscribe = subscribe
-exports.unsubscribe = unsubscribe
-
-Robot.registerSubscribeApi(subscribe, unsubscribe, isSubscribed)
-
 const job = new CronJob('2 0 10 * * *', async function () {
     try {
         const amount = await apiResubscribe()
@@ -458,11 +450,9 @@ const job = new CronJob('2 0 10 * * *', async function () {
         console.error(error)
         bot.telegram.sendMessage(TELEGRAM_ID, `There has been error.`)
     }
-}, null, true, 'Europe/Moscow');
+}, null, true, 'Europe/Moscow')
 
-job.start();
-
-const State = require('../state/state.model').model
+job.start()
 
 State.getState().then(state => {
     console.log('App is starting...', state)
@@ -473,4 +463,3 @@ State.getState().then(state => {
         console.log(`Robots hasn't been running. Because was disabled.`)
     }
 })
-const Ticker = require('../ticker/ticker.model').model

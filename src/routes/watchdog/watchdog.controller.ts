@@ -29,7 +29,7 @@ export const update: RequestHandler = async (req, res, next) => {
 
 export const run: RequestHandler = async (req, res, next) => {
     const { id } = req.params
-    const watchdog: WatchDogDocument = await Watchdog.findById(id)
+    const watchdog = await Watchdog.findById(id)
     if (!watchdog) return res.sendStatus(404)
     await watchdog.run()
     res.send(watchdog)

@@ -14,7 +14,7 @@ const paths = {
 }
 
 
-function build() {
+function compile() {
     return gulp
         .src("src/**/*.ts")
         .pipe(tsProject()).js
@@ -31,4 +31,4 @@ function clean() {
     return del(['build']);
 }
 
-exports.build = gulp.series(clean, build)
+exports.build = gulp.series(clean, compile)

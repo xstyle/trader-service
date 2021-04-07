@@ -7,7 +7,7 @@
     "dev": "nodemon",
     "start": "nodemon",
     "production": "ENV=production node index.js",
-    "upload": "gulp auto",
+    "upload": "gulp --gulpfile ./gulpfile_copy.js auto",
     "build": "gulp build",
     "tsc": "tsc"
   },

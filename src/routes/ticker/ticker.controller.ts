@@ -3,7 +3,7 @@ import { RequestHandler } from "express"
 import moment from "moment"
 import api from '../../utils/openapi'
 import { model as Order } from "../order/order.model"
-import { model as Ticker } from './ticker.model'
+import { model as Ticker, TickerDocument } from './ticker.model'
 
 const FIRST_DAY = process.env.FIRST_DAY
 
@@ -77,12 +77,13 @@ export const loader: RequestHandler = async (req, res, next) => {
     }
 }
 
-export const price: RequestHandler = async (req, res, next) => {
-    const { date, interval }: { date: string, interval: CandleResolution } = req.query as { date: string, interval: CandleResolution }
+export const price: RequestHandler<{}, {}, {}, { date: string, interval: CandleResolution }, { ticker: TickerDocument }> = async (req, res, next) => {
+    const { date, interval } = req.query
     const { ticker } = res.locals
 
-    const { from, to } = getFromToDates(date, interval)
-
+    const range = getFromToDates(date, interval)
+    if (!range) return res.sendStatus(404)
+    const { from, to } = range
     const request: {
         figi: string,
         from: string,

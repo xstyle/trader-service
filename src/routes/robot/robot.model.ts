@@ -1,15 +1,19 @@
-import { OperationType } from '@tinkoff/invest-openapi-js-sdk'
+import { CandleResolution, OperationType, Order as OrderType } from '@tinkoff/invest-openapi-js-sdk'
 import mongoose, { Document, Model, Schema, Types } from 'mongoose'
 import api from '../../utils/openapi'
 import bot from '../../utils/telegram'
 import { LimitOrderDocument, model as Order } from "../order/order.model"
+import { isSubscribed, unsubscribe } from "./robot.controller"
 
 export const model_name = 'Robot'
 
-const TELEGRAM_ID: string = process.env.TELEGRAM_ID
+const TELEGRAM_ID: string = process.env.TELEGRAM_ID || ""
 
-const RobotSchema = new Schema<RobotDocument>({
-    figi: { type: String, required: true },
+const RobotSchema = new Schema<RobotDocument, RobotModel>({
+    figi: {
+        type: String,
+        required: true
+    },
     name: String,
     ticker: String,
     budget: Number,
@@ -124,10 +128,10 @@ export interface Robot {
     stop_after_sell: boolean
     stop_after_buy: boolean
     tags: string[]
-    strategy: 'stepper' | undefined
+    strategy?: 'stepper'
 }
 
-interface RobotDocument extends Robot, Document {
+export interface RobotDocument extends Robot, Document {
     priceWasUpdated(price: number, value: number): Promise<void>
     onBuyShares(number: number, price: number): Promise<void>
     onSellShares(number: number, price: number): Promise<void>
@@ -150,9 +154,8 @@ interface RobotDocument extends Robot, Document {
 
 export interface RobotModel extends Model<RobotDocument> {
     getRobotById(_id: string): Promise<RobotDocument>
-    getRobotByIdSync(_id: string): RobotDocument | undefined
+    getRobotByIdSync: (_id: string) => RobotDocument | undefined
     isLoaded(_id: string): boolean
-    registerSubscribeApi(subscribe: any, unsubscribe: any, isSubscribed: any): void
 }
 
 RobotSchema.pre('save', function () {
@@ -229,7 +232,6 @@ RobotSchema.methods.onBuyShares = async function (number, price) {
 }
 
 RobotSchema.methods.onSellShares = async function (
-    this: RobotDocument,
     number: number,
     price: number
 ): Promise<void> {
@@ -260,7 +262,7 @@ async function getOrdersAmount(_id: Types.ObjectId): Promise<[number, number]> {
     }, [0, 0])
 }
 
-RobotSchema.methods.onAllSellShares = async function (this: RobotDocument) {
+RobotSchema.methods.onAllSellShares = async function () {
     if (this.stop_after_sell) {
         await this.disable()
         bot.telegram.sendMessage(TELEGRAM_ID, `[${this.ticker}](http://ubuntu.lan:3000/instrument/${this._id}) has been disabled after all stocks were sold.`, { parse_mode: "Markdown" })
@@ -275,7 +277,7 @@ RobotSchema.methods.onAllSellShares = async function (this: RobotDocument) {
     }
 }
 
-RobotSchema.methods.onAllBuyShares = async function (this: RobotDocument) {
+RobotSchema.methods.onAllBuyShares = async function () {
     if (this.stop_after_buy) {
         await this.disable()
         bot.telegram.sendMessage(TELEGRAM_ID, `[${this.ticker}](http://ubuntu.lan:3000/instrument/${this._id}) has been disabled after all stoks were purchased.`, { parse_mode: "Markdown" })
@@ -309,7 +311,7 @@ function unlockCheckOrder(this: void, _id: string, timeout = 0) {
     setTimeout(() => unlockCheckOrder(_id), timeout)
 }
 
-RobotSchema.methods.checkOrders = async function (this: RobotDocument) {
+RobotSchema.methods.checkOrders = async function () {
     if (isCheckOrdersLocked(this._id)) return
     console.log(`[${this._id}] ${this.ticker} проверяю ордера.`, logRobotState(this))
     lockCheckOrder(this._id)
@@ -320,7 +322,7 @@ RobotSchema.methods.checkOrders = async function (this: RobotDocument) {
         return unlockCheckOrder(this._id, 5000)
     }
 
-    let orders = []
+    let orders: OrderType[] = []
     try {
         orders = await api.orders()
     } catch (error) {
@@ -376,7 +378,7 @@ RobotSchema.methods.checkOrders = async function (this: RobotDocument) {
     unlockCheckOrder(this._id, 5000)
 }
 
-RobotSchema.methods.cancelAllOrders = async function (this: RobotDocument) {
+RobotSchema.methods.cancelAllOrders = async function (): Promise<void> {
     console.log(`[${this._id}] ${this.ticker} Запущенна отмена всех активных ордеров.`, logRobotState(this))
     const executed_orders = await Order.find({ collections: this._id, status: 'New' })
     const orders = await api.orders()
@@ -420,7 +422,7 @@ function logRobotState(instrument: RobotDocument) {
 /**
  * Расчитывает сколько акции нужно выставить на покупку, с учетом уже выставленных на покупку ордерах. Если в ордерах пусто то продает по продажной цене.
  */
-RobotSchema.methods.buy = async function (this: RobotDocument) {
+RobotSchema.methods.buy = async function () {
     if (isTransactionLocked(this._id)) return
 
     lockTransaction(this._id)
@@ -437,7 +439,7 @@ RobotSchema.methods.buy = async function (this: RobotDocument) {
     console.log(`[${this._id}] ${this.ticker} покупки разблокированны`)
 }
 
-RobotSchema.methods.getNumberForBuy = async function (this: RobotDocument) {
+RobotSchema.methods.getNumberForBuy = async function () {
     const numberInOrders = await this.getNumberInBuyOrders()
     const number = Math.floor((this.max_shares_number - this.shares_number) / this.lot) - numberInOrders
     console.log(`[${this._id}] ${this.ticker} в getNumberForBuy в ордерах на покупку ${numberInOrders} лотов. Максимум ${this.max_shares_number} на текущий момент уже есть ${this.shares_number}. Берем ${number} лотов по ${this.lot} акций.`)
@@ -445,25 +447,22 @@ RobotSchema.methods.getNumberForBuy = async function (this: RobotDocument) {
 }
 
 
-RobotSchema.methods.getNumberInBuyOrders = async function (this: RobotDocument) {
+RobotSchema.methods.getNumberInBuyOrders = async function () {
     const buy_orders = await this.getBuyOrdersV2()
     const amount = buy_orders.reduce((amount, buy_order) => amount + buy_order.requestedLots - buy_order.executedLots, 0)
     console.log(`[${this._id}] ${this.ticker} в getNumberInBuyOrders количество ордеров на покупку ${buy_orders.length} ожидает покупки ${amount}`)
     return amount
 }
 
-RobotSchema.methods.getBuyOrdersV2 = async function (this: RobotDocument) {
+RobotSchema.methods.getBuyOrdersV2 = async function () {
     const orders = await Order.find({ collections: this._id, status: 'New', operation: 'Buy' })
     console.log(`[${this._id}] ${this.ticker} в getBuyOrdersмV2 ${orders.length} ордера на покупку`)
     return orders
 }
 
-const lock_buy = {}
+const lock_buy: { [id: string]: boolean } = {}
 
-RobotSchema.methods.needBuy = async function (
-    this: RobotDocument,
-    lots: number
-) {
+RobotSchema.methods.needBuy = async function (lots: number) {
     if (lock_buy[this._id]) throw new Error('WTF????')
     lock_buy[this._id] = true
 
@@ -471,6 +470,7 @@ RobotSchema.methods.needBuy = async function (
         figi,
         buy_price: price
     } = this
+
     const request: {
         figi: string,
         lots: number,
@@ -524,7 +524,7 @@ RobotSchema.methods.needBuy = async function (
 /**
  * Расчитывает сколько акции нужно выставить на продажу, с учетом уже выставленных на продажу ордерах.
  */
-RobotSchema.methods.sell = async function (this: RobotDocument) {
+RobotSchema.methods.sell = async function () {
     if (isTransactionLocked(this._id)) return
     lockTransaction(this._id)
 
@@ -536,26 +536,23 @@ RobotSchema.methods.sell = async function (this: RobotDocument) {
     unlockTransacion(this._id)
 }
 
-RobotSchema.methods.getNumberForSell = async function (this: RobotDocument): Promise<number> {
+RobotSchema.methods.getNumberForSell = async function (): Promise<number> {
     const numberInOrders = await this.getNumberInSellOrders()
     return Math.floor((this.shares_number - this.min_shares_number) / this.lot) - numberInOrders
 }
 
-RobotSchema.methods.getNumberInSellOrders = async function (this: RobotDocument): Promise<number> {
+RobotSchema.methods.getNumberInSellOrders = async function (): Promise<number> {
     const sell_orders = await this.getSellOrdersV2()
     return sell_orders.reduce((result, sell_order) => result + sell_order.requestedLots - sell_order.executedLots, 0)
 }
 
-RobotSchema.methods.getSellOrdersV2 = async function (this: RobotDocument): Promise<LimitOrderDocument[]> {
+RobotSchema.methods.getSellOrdersV2 = async function (): Promise<LimitOrderDocument[]> {
     const orders = await Order.find({ collections: this._id, status: 'New', operation: 'Sell' })
     console.log(`[${this._id}] ${this.ticker} в getSellOrdersV2 ${orders.length} ордера на продажу`)
     return orders
 }
 
-RobotSchema.methods.needSell = async function (
-    this: RobotDocument,
-    lots: number
-) {
+RobotSchema.methods.needSell = async function (lots: number) {
     const {
         figi,
         sell_price: price
@@ -609,24 +606,23 @@ RobotSchema.methods.needSell = async function (
 
 }
 
-const interval = '1min'
+const INTERVAL_1_MIN: CandleResolution = '1min'
 
-RobotSchema.methods.disable = async function (this: RobotDocument) {
+RobotSchema.methods.disable = async function () {
     this.is_enabled = false
     await this.save()
-    if (subscribe_api.isSubscribed({ figi: this.figi, _id: this._id, interval })) {
-        subscribe_api.unsubscribe({ figi: this.figi, _id: this._id, interval })
+    if (isSubscribed({ figi: this.figi, _id: this._id, interval: INTERVAL_1_MIN })) {
+        unsubscribe({ figi: this.figi, _id: this._id, interval: INTERVAL_1_MIN })
     }
 }
 
-const instruments: { [id: string]: RobotDocument } = {};
+const instruments: { [id: string]: RobotDocument | undefined } = {};
 
-RobotSchema.statics.getRobotById = async function (
-    this: RobotModel,
-    _id: string
-) {
+RobotSchema.statics.getRobotById = async function (_id: string) {
     if (instruments[_id]) return instruments[_id]
-    return instruments[_id] = await this.findById(_id)
+    const robot = await this.findById(_id)
+    if (!robot) return
+    return instruments[_id] = robot
 }
 
 RobotSchema.statics.getRobotByIdSync = function (_id: string) {
@@ -635,18 +631,6 @@ RobotSchema.statics.getRobotByIdSync = function (_id: string) {
 
 RobotSchema.statics.isLoaded = function (_id: string) {
     return !!instruments[_id]
-}
-
-const subscribe_api = {
-    subscribe: null,
-    unsubscribe: null,
-    isSubscribed: null
-}
-
-RobotSchema.statics.registerSubscribeApi = function (subscribe, unsubscribe, isSubscribed) {
-    subscribe_api.subscribe = subscribe
-    subscribe_api.unsubscribe = unsubscribe
-    subscribe_api.isSubscribed = isSubscribed
 }
 
 export const model = mongoose.model<RobotDocument, RobotModel>(model_name, RobotSchema)

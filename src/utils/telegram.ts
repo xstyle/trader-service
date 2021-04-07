@@ -1,6 +1,7 @@
 import { Telegraf } from 'telegraf'
 
-const bot = new Telegraf(process.env.TELEGRAM_TOKEN)
+const { TELEGRAM_TOKEN = "" } = process.env
+const bot = new Telegraf(TELEGRAM_TOKEN)
 
 bot.start((ctx) => ctx.reply('Welcome!'))
 bot.help((ctx) => ctx.reply('Send me a sticker'))

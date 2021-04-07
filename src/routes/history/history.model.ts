@@ -2,7 +2,7 @@ import mongoose, { Document, Model, Schema } from "mongoose";
 
 export const model_name = 'History'
 
-const HistorySchema = new Schema<HistoryDocument>({
+const HistorySchema = new Schema<HistoryDocument, HistoryModel>({
     title: { type: String },
     description: { type: String },
     created_at: { type: Date, default: Date.now },
