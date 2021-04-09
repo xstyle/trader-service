@@ -1,5 +1,6 @@
-import { CandleResolution, OperationType, Order as OrderType } from '@tinkoff/invest-openapi-js-sdk'
+import { CandleResolution, FIGI, LimitOrderRequest, Order as OrderType } from '@tinkoff/invest-openapi-js-sdk'
 import mongoose, { Document, Model, Schema, Types } from 'mongoose'
+import { Locker } from '../../utils/Locker'
 import api from '../../utils/openapi'
 import { isSubscribed, unsubscribe } from '../../utils/subscribes-manager'
 import bot from '../../utils/telegram'
@@ -172,9 +173,8 @@ RobotSchema.path('price_for_placing_sell_order').get(function (this: RobotDocume
     return this.sell_price
 })
 
-const lock = {}
-const order_lock = {}
-const forse_order_check = {}
+const order_check_locker = new Locker()
+const force_order_check_locker = new Locker()
 
 RobotSchema.methods.priceWasUpdated = async function (
     this: RobotDocument,
@@ -197,9 +197,9 @@ RobotSchema.methods.priceWasUpdated = async function (
     if (
         ((this.buy_price >= price) && (this.shares_number < this.max_shares_number))
         || ((this.sell_price <= price) && (this.shares_number > this.min_shares_number))
-        || forse_order_check[this._id]
+        || force_order_check_locker.isLocked(this._id)
     ) {
-        forse_order_check[this._id] = false
+        force_order_check_locker.unlock(this._id)
         await this.checkOrders()
     }
 }
@@ -292,41 +292,25 @@ RobotSchema.methods.onAllBuyShares = async function () {
     }
 }
 
-function isCheckOrdersLocked(this: void, _id: string): boolean {
-    if (order_lock[_id]) {
-        forse_order_check[_id] = true
-    }
-    return order_lock[_id]
-}
-
-function lockCheckOrder(this: void, _id: string) {
-    order_lock[_id] = true
-}
-
-function unlockCheckOrder(this: void, _id: string, timeout = 0) {
-    if (timeout === 0) {
-        order_lock[_id] = false
+RobotSchema.methods.checkOrders = async function () {
+    if (order_check_locker.isLocked(this._id)) {
+        force_order_check_locker.lock(this._id)
         return
     }
-    setTimeout(() => unlockCheckOrder(_id), timeout)
-}
-
-RobotSchema.methods.checkOrders = async function () {
-    if (isCheckOrdersLocked(this._id)) return
     console.log(`[${this._id}] ${this.ticker} проверяю ордера.`, logRobotState(this))
-    lockCheckOrder(this._id)
+    order_check_locker.lock(this._id)
 
     const executing_orders = await Order.find({ collections: this._id, status: 'New' })
     if (!executing_orders.length) {
         console.log(`[${this._id}] ${this.ticker} По моим данным ордеров не должно быть. У брокера даже спрашивать не будем.`)
-        return unlockCheckOrder(this._id, 5000)
+        return order_check_locker.unlockWithTimeout(this._id, 5000)
     }
 
     let orders: OrderType[] = []
     try {
         orders = await api.orders()
     } catch (error) {
-        unlockCheckOrder(this._id, 5000)
+        order_check_locker.unlockWithTimeout(this._id, 5000)
         return console.error(`[${this._id}]`, error, `${this.ticker} Ошибка при проверке статуса существующих ордеров.`)
     }
 
@@ -375,7 +359,7 @@ RobotSchema.methods.checkOrders = async function () {
 
     await this.save()
 
-    unlockCheckOrder(this._id, 5000)
+    order_check_locker.unlockWithTimeout(this._id, 5000)
 }
 
 RobotSchema.methods.cancelAllOrders = async function (): Promise<void> {
@@ -401,19 +385,7 @@ RobotSchema.methods.cancelAllOrders = async function (): Promise<void> {
     await this.save()
 }
 
-function isTransactionLocked(_id: string) {
-    return lock[_id]
-}
-
-function lockTransaction(_id: string) {
-    console.log(`[${_id}] transaction was locked for ${_id}`)
-    lock[_id] = true
-}
-
-function unlockTransacion(_id: string) {
-    console.log(`[${_id}] transaction was unlocked for ${_id}`)
-    lock[_id] = false
-}
+const robot_locker: Locker = new Locker()
 
 function logRobotState(instrument: RobotDocument) {
     return `${instrument.ticker} State [${instrument._id}]. Shares numbers [${instrument.min_shares_number}, ${instrument.shares_number}, ${instrument.max_shares_number}].`
@@ -423,9 +395,8 @@ function logRobotState(instrument: RobotDocument) {
  * Расчитывает сколько акции нужно выставить на покупку, с учетом уже выставленных на покупку ордерах. Если в ордерах пусто то продает по продажной цене.
  */
 RobotSchema.methods.buy = async function () {
-    if (isTransactionLocked(this._id)) return
-
-    lockTransaction(this._id)
+    if (robot_locker.isLocked(this._id)) return
+    robot_locker.lock(this._id)
     console.log(`[${this._id}] ${this.ticker} другие покупки заблокированны`)
 
     const number = await this.getNumberForBuy()
@@ -435,7 +406,7 @@ RobotSchema.methods.buy = async function () {
     } else {
         console.log(`[${this._id}] ${this.ticker} новый ордер отправлять не буду.`)
     }
-    unlockTransacion(this._id)
+    robot_locker.unlock(this._id)
     console.log(`[${this._id}] ${this.ticker} покупки разблокированны`)
 }
 
@@ -460,23 +431,18 @@ RobotSchema.methods.getBuyOrdersV2 = async function () {
     return orders
 }
 
-const lock_buy: { [id: string]: boolean } = {}
+const buy_locker: Locker = new Locker()
 
 RobotSchema.methods.needBuy = async function (lots: number) {
-    if (lock_buy[this._id]) throw new Error('WTF????')
-    lock_buy[this._id] = true
+    if (buy_locker.isLocked(this._id)) throw new Error('WTF????')
+    buy_locker.lock(this._id)
 
     const {
         figi,
         buy_price: price
     } = this
 
-    const request: {
-        figi: string,
-        lots: number,
-        operation: OperationType,
-        price: number
-    } = {
+    const request: LimitOrderRequest & FIGI = {
         figi,
         lots,
         operation: 'Buy',
@@ -509,13 +475,11 @@ RobotSchema.methods.needBuy = async function (lots: number) {
 
         await this.save()
 
-        forse_order_check[this._id] = true // при малейшем изменении в ордерах перепроверяем их
+        force_order_check_locker.lock(this._id) // при малейшем изменении в ордерах перепроверяем их
 
-        setTimeout(() => lock_buy[this._id] = false, 10000)
-
-
+        setTimeout(() => buy_locker.unlock(this._id), 10000)
     } catch (error) {
-        setTimeout(() => lock_buy[this._id] = false, 60 * 1000)
+        setTimeout(() => buy_locker.unlock(this._id), 60 * 1000)
         bot.telegram.sendMessage(TELEGRAM_ID, `[${this._id}] ${this.ticker} Ошибка при отправке ордера на покупку ${lots} лотов по цене ${price}`)
         console.log(`[${this._id}]`, error, request)
     }
@@ -525,15 +489,16 @@ RobotSchema.methods.needBuy = async function (lots: number) {
  * Расчитывает сколько акции нужно выставить на продажу, с учетом уже выставленных на продажу ордерах.
  */
 RobotSchema.methods.sell = async function () {
-    if (isTransactionLocked(this._id)) return
-    lockTransaction(this._id)
+    if (robot_locker.isLocked(this._id)) return
+    robot_locker.lock(this._id)
 
     const number = await this.getNumberForSell()
+
     if (number > 0) {
         await this.needSell(number)
     }
 
-    unlockTransacion(this._id)
+    robot_locker.unlock(this._id)
 }
 
 RobotSchema.methods.getNumberForSell = async function (): Promise<number> {
@@ -557,12 +522,7 @@ RobotSchema.methods.needSell = async function (lots: number) {
         figi,
         sell_price: price
     } = this
-    const request: {
-        figi: string,
-        lots: number,
-        operation: OperationType,
-        price: number
-    } = {
+    const request: LimitOrderRequest & FIGI = {
         figi,
         lots,
         operation: 'Sell',
@@ -595,15 +555,12 @@ RobotSchema.methods.needSell = async function (lots: number) {
 
         await this.save()
 
-        forse_order_check[this._id] = true // при малейшем изменении в ордерах перепроверяем их
-
+        force_order_check_locker.lock(this._id) // при малейшем изменении в ордерах перепроверяем их
 
     } catch (error) {
         bot.telegram.sendMessage(TELEGRAM_ID, `[${this._id}] ${this.ticker} Ошибка при отправке ордера на продажу ${lots} лотов по цене ${price}`, { parse_mode: "Markdown" })
         return console.log(`[${this._id}]`, error, request)
     }
-
-
 }
 
 const INTERVAL_1_MIN: CandleResolution = '1min'
