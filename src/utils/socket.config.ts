@@ -1,6 +1,6 @@
 import { Server, Socket } from "socket.io";
 import { Candle, CandleResolution, CandleStreaming } from "@tinkoff/invest-openapi-js-sdk"
-import { subscribe as _subscribe, unsubscribe as _unsubscribe } from "../routes/robot/robot.controller"
+import { subscribe as _subscribe, unsubscribe as _unsubscribe } from "./subscribes-manager"
 
 export default function SocketConfig(io: Server) {
 

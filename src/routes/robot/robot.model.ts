@@ -1,9 +1,9 @@
 import { CandleResolution, OperationType, Order as OrderType } from '@tinkoff/invest-openapi-js-sdk'
 import mongoose, { Document, Model, Schema, Types } from 'mongoose'
 import api from '../../utils/openapi'
+import { isSubscribed, unsubscribe } from '../../utils/subscribes-manager'
 import bot from '../../utils/telegram'
 import { LimitOrderDocument, model as Order } from "../order/order.model"
-import { isSubscribed, unsubscribe } from "./robot.controller"
 
 export const model_name = 'Robot'
 
@@ -616,21 +616,23 @@ RobotSchema.methods.disable = async function () {
     }
 }
 
-const instruments: { [id: string]: RobotDocument | undefined } = {};
+type RobotsIndex = { [id: string]: RobotDocument | undefined }
+
+const robots_index: RobotsIndex = {};
 
 RobotSchema.statics.getRobotById = async function (_id: string) {
-    if (instruments[_id]) return instruments[_id]
+    if (robots_index[_id]) return robots_index[_id]
     const robot = await this.findById(_id)
     if (!robot) return
-    return instruments[_id] = robot
+    return robots_index[_id] = robot
 }
 
 RobotSchema.statics.getRobotByIdSync = function (_id: string) {
-    return instruments[_id]
+    return robots_index[_id]
 }
 
 RobotSchema.statics.isLoaded = function (_id: string) {
-    return !!instruments[_id]
+    return !!robots_index[_id]
 }
 
 export const model = mongoose.model<RobotDocument, RobotModel>(model_name, RobotSchema)

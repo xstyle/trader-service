@@ -1,7 +1,7 @@
 import { Candle, CandleStreaming } from '@tinkoff/invest-openapi-js-sdk'
 import mongoose, { Document, Model, Schema } from 'mongoose'
+import { subscribe, unsubscribe } from '../../utils/subscribes-manager'
 import bot from '../../utils/telegram'
-import { subscribe, unsubscribe } from '../robot/robot.controller'
 import { model as Ticker } from '../ticker/ticker.model'
 
 export const model_name = 'Watchdog'
