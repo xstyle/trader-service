@@ -7,7 +7,7 @@ import bot from '../../utils/telegram'
 import { model as Order } from "../order/order.model"
 import { model as State } from '../state/state.model'
 import { model as Ticker } from '../ticker/ticker.model'
-import { model as Robot, RobotDocument } from "./robot.model"
+import { model as Robot, Robot as RobotType, RobotDocument } from "./robot.model"
 
 const TELEGRAM_ID: string = process.env.TELEGRAM_ID || ""
 
@@ -140,12 +140,17 @@ export const checkOrders: RequestHandler<{}, RobotDocument, {}, {}, { robot: Rob
     }
 }
 
-export const create: RequestHandler = async (req, res, next) => {
-    const { body } = req
-    const market_instrument = await Ticker.getOrCreateTickerByFigiOrTicker(body.figi)
-    if (!market_instrument) return next(new Error(`Error: Ticker ${body.ticker} not found`))
-    body.ticker = market_instrument.ticker
-    res.send(await Robot.create(body))
+export const create: RequestHandler<{}, {}, RobotType> = async (req, res, next) => {
+    try {
+        const { body } = req
+        const market_instrument = await Ticker.getOrCreateTickerByFigiOrTicker(body.figi)
+        if (!market_instrument) return next(new Error(`Error: Ticker ${body.ticker} not found`))
+        body.ticker = market_instrument.ticker
+        if (!body.strategy)  delete body.strategy
+        res.send(await Robot.create(body))
+    } catch (error) {
+        next(error)
+    }
 }
 
 export const update: RequestHandler = async (req, res, next) => {
