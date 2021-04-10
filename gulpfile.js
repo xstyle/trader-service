@@ -2,6 +2,7 @@ const gulp = require('gulp')
 const { src, dest } = gulp
 const del = require('del')
 const ts = require("gulp-typescript");
+var sourcemaps = require('gulp-sourcemaps');
 const tsProject = ts.createProject("tsconfig.json");
 
 const paths = {
@@ -17,7 +18,9 @@ const paths = {
 function compile() {
     return gulp
         .src("src/**/*.ts")
+        .pipe(sourcemaps.init())
         .pipe(tsProject()).js
+        .pipe(sourcemaps.write())
         .pipe(gulp.dest('dist'));
 }
 
