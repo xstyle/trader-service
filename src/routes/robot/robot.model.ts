@@ -1,8 +1,8 @@
-import { CandleResolution, FIGI, LimitOrderRequest, Order as OrderType } from '@tinkoff/invest-openapi-js-sdk'
+import { Candle, CandleResolution, FIGI, LimitOrderRequest, Order as OrderType } from '@tinkoff/invest-openapi-js-sdk'
 import mongoose, { Document, Model, Schema, Types } from 'mongoose'
 import { Locker } from '../../utils/Locker'
 import api from '../../utils/openapi'
-import { isSubscribed, unsubscribe } from '../../utils/subscribes-manager'
+import { isSubscribed, subscribe, unsubscribe } from '../../utils/subscribes-manager'
 import bot from '../../utils/telegram'
 import { LimitOrderDocument, model as Order } from "../order/order.model"
 
@@ -151,6 +151,7 @@ export interface RobotDocument extends Robot, Document {
     getSellOrdersV2(): Promise<LimitOrderDocument[]>
     needSell(lots: number): Promise<void>
     disable(): Promise<void>
+    enable(): Promise<void>
 }
 
 export interface RobotModel extends Model<RobotDocument> {
@@ -570,6 +571,22 @@ RobotSchema.methods.disable = async function () {
     await this.save()
     if (isSubscribed({ figi: this.figi, _id: this._id, interval: INTERVAL_1_MIN })) {
         unsubscribe({ figi: this.figi, _id: this._id, interval: INTERVAL_1_MIN })
+    }
+}
+
+RobotSchema.methods.enable = async function () {
+    const robot = await model.getRobotById(this._id)
+    robot.is_enabled = true
+    await robot.save()
+    if (isSubscribed({ figi: robot.figi, _id: robot._id, interval: INTERVAL_1_MIN })) {
+        subscribe({ figi: robot.figi, _id: robot._id, interval: INTERVAL_1_MIN }, async (data: Candle) => {
+            const { c: price, v: value } = data
+            try {
+                await robot.priceWasUpdated(price, value)
+            } catch (error) {
+                console.error(error)
+            }
+        })
     }
 }
 

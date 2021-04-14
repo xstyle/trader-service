@@ -1,9 +1,8 @@
-import { Candle, CandleResolution, CandleStreaming } from "@tinkoff/invest-openapi-js-sdk"
 import { CronJob } from "cron"
 import { RequestHandler } from "express"
 import { LeanDocument } from "mongoose"
 import api from '../../utils/openapi'
-import { apiResubscribe, isSubscribed, subscribe, unsubscribe } from "../../utils/subscribes-manager"
+import { apiResubscribe, isSubscribed, unsubscribe } from "../../utils/subscribes-manager"
 import bot from '../../utils/telegram'
 import { model as Order } from "../order/order.model"
 import { model as State } from '../state/state.model'
@@ -44,12 +43,13 @@ export const enable: RequestHandler<{}, RobotDocument, undefined, {}, { robot: R
     try {
         const { robot } = res.locals
         if (!robot.is_enabled) {
-            robot.is_enabled = true
-            await robot.save()
             const state = await State.getState()
             // Горячее включение робота
             if (state.is_running) {
-                getRobotAndSubscribe(robot._id)
+                await robot.enable()
+            } else {
+                robot.is_enabled = true
+                await robot.save()
             }
         }
 
@@ -71,7 +71,7 @@ export const disable: RequestHandler<{}, RobotDocument, undefined, {}, { robot: 
 
 export const loader: RequestHandler<{ id: string }, any, any, any, { robot?: RobotDocument }> = async (req, res, next) => {
     const { id } = req.params
-    const robot = Robot.isLoaded(id) ? Robot.getRobotByIdSync(id) : await Robot.findById(id)
+    const robot = Robot.getRobotByIdSync(id) || await Robot.findById(id)
     if (!robot) return res.sendStatus(404)
     res.locals.robot = robot
     next()
@@ -197,10 +197,6 @@ export const remove: RequestHandler<{}, RobotDocument, undefined, {}, { robot: R
     res.json(robot)
 }
 
-
-export const state: RequestHandler = async (req, res, next) => {
-    res.json(await State.getState())
-}
 let positionsCache;
 export const portfolio: RequestHandler = async (req, res, next) => {
     try {
@@ -219,17 +215,11 @@ export const portfolio: RequestHandler = async (req, res, next) => {
     }
 }
 
-export const run: RequestHandler = async (req, res, next) => {
-    const state = await State.getState()
-    res.send(await state.run())
-}
-
-export async function justRun() {
-    const robots = await Robot.find({ is_enabled: true }, '_id').exec()
-
+export async function runRobots() {
+    const robots = await Robot.find({ is_enabled: true }, '_id')
     console.log(`Setup ${robots.length} robots`)
     for (const robot of robots) {
-        await getRobotAndSubscribe(robot._id)
+        await robot.enable()
     }
     try {
         bot.telegram.sendMessage(TELEGRAM_ID, `${robots.length} robots have been started`)
@@ -238,39 +228,8 @@ export async function justRun() {
     }
 }
 
-bot.command('run', async () => {
-    const state = await State.getState()
-    await state.run()
-})
-
-bot.command('stop', async () => {
-    const state = await State.getState()
-    await state.stop()
-})
-
-async function getRobotAndSubscribe(_id: string) {
-    const robot = await Robot.getRobotById(_id)
-    subscribe({
-        figi: robot.figi,
-        _id: robot._id,
-        interval: '1min'
-    }, async (data: Candle) => {
-        const { c: price, v: value } = data
-        try {
-            await robot.priceWasUpdated(price, value)
-        } catch (error) {
-            console.error(error)
-        }
-    })
-}
-
-export const stop: RequestHandler = async (req, res, next) => {
-    const state = await State.getState()
-    res.send(await state.stop())
-}
-
-export async function justStop() {
-    const robots = await Robot.find({ is_enabled: { $exists: true } }).exec()
+export async function stopRobots() {
+    const robots = await Robot.find({ is_enabled: { $exists: true } })
     console.log(`Down ${robots.length} robots`)
     for (const robot of robots) {
         if (isSubscribed({ figi: robot.figi, _id: robot._id, interval: "1min" })) {
@@ -300,12 +259,4 @@ const job = new CronJob('2 0 10 * * *', async function () {
 
 job.start()
 
-State.getState().then(state => {
-    console.log('App is starting...', state)
-    if (state.is_running) {
-        justRun()
-        console.log(`Robots has been running automaticaly.`)
-    } else {
-        console.log(`Robots hasn't been running. Because was disabled.`)
-    }
-})
+

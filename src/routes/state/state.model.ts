@@ -1,5 +1,5 @@
 import mongoose, { Document, Model, Schema } from 'mongoose'
-import { justRun as run, justStop as stop } from '../robot/robot.controller'
+import { runRobots, stopRobots } from '../robot/robot.controller'
 
 export const model_name = 'State'
 
@@ -32,13 +32,13 @@ StateSchema.statics.getState = async function (this: StateModel): Promise<StateD
 StateSchema.methods.stop = async function (this: StateDocument): Promise<StateDocument> {
     this.is_running = false
 
-    await stop()
+    await stopRobots()
     return this.save()
 }
 
 StateSchema.methods.run = async function (this: StateDocument): Promise<StateDocument> {
     this.is_running = true
-    await run()
+    await runRobots()
     return this.save()
 }
 

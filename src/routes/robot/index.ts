@@ -9,10 +9,7 @@ import {
     portfolio,
     remove,
     reset,
-    run,
     show,
-    state,
-    stop,
     sync,
     update
 } from './robot.controller'
@@ -20,9 +17,6 @@ import {
 const router = express.Router()
 
 router.get('/', index)
-router.get('/run', run)
-router.get('/stop', stop)
-router.get('/state', state)
 router.get('/portfolio', portfolio)
 
 router.get('/:id', loader, show)
