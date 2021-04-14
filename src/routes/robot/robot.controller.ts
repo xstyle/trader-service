@@ -1,6 +1,7 @@
 import { Candle, CandleResolution, CandleStreaming } from "@tinkoff/invest-openapi-js-sdk"
 import { CronJob } from "cron"
 import { RequestHandler } from "express"
+import { LeanDocument } from "mongoose"
 import api from '../../utils/openapi'
 import { apiResubscribe, isSubscribed, subscribe, unsubscribe } from "../../utils/subscribes-manager"
 import bot from '../../utils/telegram'
@@ -11,7 +12,7 @@ import { model as Robot, Robot as RobotType, RobotDocument } from "./robot.model
 
 const TELEGRAM_ID: string = process.env.TELEGRAM_ID || ""
 
-export const index: RequestHandler = async (req, res, next) => {
+export const index: RequestHandler<{}, LeanDocument<RobotDocument>[], undefined> = async (req, res, next) => {
     const {
         figi,
         tag,
@@ -35,11 +36,11 @@ export const index: RequestHandler = async (req, res, next) => {
     }))
 }
 
-export const show: RequestHandler = (req, res, next) => {
+export const show: RequestHandler<{}, RobotDocument, undefined, {}, { robot: RobotDocument }> = (req, res, next) => {
     res.send(res.locals.robot)
 }
 
-export const enable: RequestHandler = async (req, res, next) => {
+export const enable: RequestHandler<{}, RobotDocument, undefined, {}, { robot: RobotDocument }> = async (req, res, next) => {
     try {
         const { robot } = res.locals
         if (!robot.is_enabled) {
@@ -58,7 +59,7 @@ export const enable: RequestHandler = async (req, res, next) => {
     }
 }
 
-export const disable: RequestHandler = async (req, res, next) => {
+export const disable: RequestHandler<{}, RobotDocument, undefined, {}, { robot: RobotDocument }> = async (req, res, next) => {
     try {
         const { robot } = res.locals
         await robot.disable()
@@ -68,7 +69,7 @@ export const disable: RequestHandler = async (req, res, next) => {
     }
 }
 
-export const loader: RequestHandler<any, any, any, any, { robot?: RobotDocument }> = async (req, res, next) => {
+export const loader: RequestHandler<{ id: string }, any, any, any, { robot?: RobotDocument }> = async (req, res, next) => {
     const { id } = req.params
     const robot = Robot.isLoaded(id) ? Robot.getRobotByIdSync(id) : await Robot.findById(id)
     if (!robot) return res.sendStatus(404)
@@ -76,7 +77,7 @@ export const loader: RequestHandler<any, any, any, any, { robot?: RobotDocument 
     next()
 }
 
-export const sync: RequestHandler = async (req, res, next) => {
+export const sync: RequestHandler<{}, RobotDocument, undefined, {}, { robot: RobotDocument }> = async (req, res, next) => {
     const { robot } = res.locals
     const orders = await Order.find({ collections: robot._id })
 
@@ -120,7 +121,7 @@ export const sync: RequestHandler = async (req, res, next) => {
     res.send(await robot.save())
 }
 
-export const reset: RequestHandler = async (req, res, next) => {
+export const reset: RequestHandler<{}, RobotDocument, undefined, {}, { robot: RobotDocument }> = async (req, res, next) => {
     try {
         const { robot } = res.locals
         await robot.cancelAllOrders()
@@ -146,18 +147,18 @@ export const create: RequestHandler<{}, {}, RobotType> = async (req, res, next) 
         const market_instrument = await Ticker.getOrCreateTickerByFigiOrTicker(body.figi)
         if (!market_instrument) return next(new Error(`Error: Ticker ${body.ticker} not found`))
         body.ticker = market_instrument.ticker
-        if (!body.strategy)  delete body.strategy
+        if (!body.strategy) delete body.strategy
         res.send(await Robot.create(body))
     } catch (error) {
         next(error)
     }
 }
 
-export const update: RequestHandler = async (req, res, next) => {
-    const { params: { id }, body } = req;
+export const update: RequestHandler<{}, RobotDocument, RobotType, {}, { robot: RobotDocument }> = async (req, res, next) => {
+    const { body } = req;
 
     if (req.body.buy_price >= req.body.sell_price) {
-        return next(new Error('Suck a dick! WTF? Whats wrong with you?'))
+        return next(new Error('WTF? Whats wrong with you?'))
     }
     const { robot } = res.locals
 
@@ -179,8 +180,6 @@ export const update: RequestHandler = async (req, res, next) => {
 
     robot.status = body.status
     robot.shares_number = body.shares_number
-    robot.purchase_price = body.purchase_price
-    robot.profit_capitalization = body.profit_capitalization
     robot.stop_after_sell = body.stop_after_sell
     robot.tags = body.tags
     robot.lot = body.lot
@@ -190,7 +189,7 @@ export const update: RequestHandler = async (req, res, next) => {
     res.json(robot)
 }
 
-export const remove: RequestHandler = async (req, res, next) => {
+export const remove: RequestHandler<{}, RobotDocument, undefined, {}, { robot: RobotDocument }> = async (req, res, next) => {
     const { robot } = res.locals
     if (robot.is_enabled) return next(new Error('Robot is enabled'))
     robot.is_removed = true
