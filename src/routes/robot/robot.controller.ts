@@ -1,13 +1,14 @@
-import { CronJob } from "cron"
+import { PortfolioPosition } from "@tinkoff/invest-openapi-js-sdk"
 import { RequestHandler } from "express"
 import { LeanDocument } from "mongoose"
 import api from '../../utils/openapi'
-import { apiResubscribe, isSubscribed, unsubscribe } from "../../utils/subscribes-manager"
+import { isSubscribed, unsubscribe } from "../../utils/subscribes-manager"
 import bot from '../../utils/telegram'
 import { model as Order } from "../order/order.model"
 import { model as State } from '../state/state.model'
 import { model as Ticker } from '../ticker/ticker.model'
 import { model as Robot, Robot as RobotType, RobotDocument } from "./robot.model"
+import { job } from "./robot.service"
 
 const TELEGRAM_ID: string = process.env.TELEGRAM_ID || ""
 
@@ -197,17 +198,13 @@ export const remove: RequestHandler<{}, RobotDocument, undefined, {}, { robot: R
     res.json(robot)
 }
 
-let positionsCache;
+let positionsCache: PortfolioPosition[] | undefined;
 export const portfolio: RequestHandler = async (req, res, next) => {
     try {
         const positions = positionsCache || (await api.portfolio()).positions;
         if (!positionsCache) {
             positionsCache = positions
-            setTimeout(() => positionsCache = null, 1000 * 60 * 30)
-        }
-        for (const position of positions) {
-            const ticker = await Ticker.getOrCreateTickerByFigiOrTicker(position.figi)
-            position.currency = ticker.currency
+            setTimeout(() => positionsCache = undefined, 1000 * 60 * 30)
         }
         res.send(positions)
     } catch (error) {
@@ -246,17 +243,3 @@ export async function stopRobots() {
 
     }
 }
-
-const job = new CronJob('2 0 10 * * *', async function () {
-    try {
-        const amount = await apiResubscribe()
-        bot.telegram.sendMessage(TELEGRAM_ID, `${amount} instruments have been restarted by CronJob`)
-    } catch (error) {
-        console.error(error)
-        bot.telegram.sendMessage(TELEGRAM_ID, `There has been error.`)
-    }
-}, null, true, 'Europe/Moscow')
-
-job.start()
-
-
