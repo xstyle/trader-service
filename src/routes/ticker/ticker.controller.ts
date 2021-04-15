@@ -7,8 +7,15 @@ import { model as Ticker, TickerDocument } from './ticker.model'
 
 const FIRST_DAY = process.env.FIRST_DAY
 
-export const index: RequestHandler = async (req, res, next) => {
-    res.send(await Ticker.find().sort({ ticker: 1 }))
+export const index: RequestHandler<{}, TickerDocument[], undefined, { figi?: string | string[] }> = async (req, res, next) => {
+    const { figi } = req.query
+    const query = Ticker.find().sort({ ticker: 1 })
+
+    if (figi) {
+        query.where({figi})
+    }
+
+    res.send(await query)
 }
 
 export const show: RequestHandler = async (req, res, next) => {
