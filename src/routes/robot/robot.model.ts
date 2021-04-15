@@ -578,7 +578,8 @@ RobotSchema.methods.enable = async function () {
     const robot = await model.getRobotById(this._id)
     robot.is_enabled = true
     await robot.save()
-    if (isSubscribed({ figi: robot.figi, _id: robot._id, interval: INTERVAL_1_MIN })) {
+    if (!isSubscribed({ figi: robot.figi, _id: robot._id, interval: INTERVAL_1_MIN })) {
+        console.log('Robot has subscribed')
         subscribe({ figi: robot.figi, _id: robot._id, interval: INTERVAL_1_MIN }, async (data: Candle) => {
             const { c: price, v: value } = data
             try {
@@ -587,6 +588,8 @@ RobotSchema.methods.enable = async function () {
                 console.error(error)
             }
         })
+    } else {
+        console.log('Robot is already working.')
     }
 }
 
