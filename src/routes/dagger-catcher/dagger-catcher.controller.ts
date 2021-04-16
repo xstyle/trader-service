@@ -3,12 +3,19 @@ import { RequestHandler } from 'express'
 import { DaggerCatcherDocument, DaggerCatcherType, model as DaggerCatcher } from './dagger-catcher.model'
 
 export const index: RequestHandler<{}, DaggerCatcherDocument[]> = async (req, res, next) => {
-    const daggerCatchers = await DaggerCatcher.find()
+    const daggerCatchers = await DaggerCatcher.find().sort({ is_pinned: -1 })
     return res.send(daggerCatchers)
 }
 
 export const show: RequestHandler<{}, DaggerCatcherDocument, {}, {}, { daggerCatcher: DaggerCatcherDocument }> = async (req, res, next) => {
     res.send(res.locals.daggerCatcher)
+}
+
+export const setPinned: RequestHandler<{}, DaggerCatcherDocument, undefined, {}, { daggerCatcher: DaggerCatcherDocument }> = async (req, res, next) => {
+    const { daggerCatcher } = res.locals
+    daggerCatcher.is_pinned = !daggerCatcher.is_pinned
+    await daggerCatcher.save()
+    res.send(daggerCatcher)
 }
 
 export const create: RequestHandler<{}, DaggerCatcherDocument, DaggerCatcherType> = async (req, res, next) => {
