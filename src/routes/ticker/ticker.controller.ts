@@ -39,18 +39,27 @@ export const candles: RequestHandler = async (req, res, next) => {
     const { ticker } = res.locals
     const from = moment()
     switch (interval) {
+        case 'month':
+            from.add(-10, 'y')
+            break
+        case 'week':
+            from.add(-2, 'y')
+            break
         case 'day':
             from.add(-365, 'd')
             break
         case 'hour':
-            from.add(-6, 'd')
+            from.add(-7, 'd')
             break
         case '1min':
+        case '2min':      
+        case '3min':      
+        case '5min':    
             from.add(-1, 'd')
             break
         default:
-            from.add(-365, 'd')
-            break;
+            from.add(-30, 'y')
+            break
     }
 
     const request = {
@@ -59,8 +68,6 @@ export const candles: RequestHandler = async (req, res, next) => {
         to: moment().toISOString(),
         interval
     }
-
-    console.log(request)
 
     try {
         const data = await api.candlesGet(request)
