@@ -1,51 +1,87 @@
+import { CandleResolution, CandleStreaming, Depth, OrderbookStreaming } from "@tinkoff/invest-openapi-js-sdk";
 import { Server, Socket } from "socket.io";
-import { Candle, CandleResolution, CandleStreaming } from "@tinkoff/invest-openapi-js-sdk"
-import { subscribe as _subscribe, unsubscribe as _unsubscribe } from "./subscribes-manager"
+import api from "./openapi";
 
 export default function SocketConfig(io: Server) {
 
-    function handlePriceUpdated(data: Candle) {
-        const { figi, interval } = data
-        //console.log(`SOCKET Update ticker ${JSON.stringify(data)}`);
-        setLastData({ data, figi, interval })
-        io.to(`${figi}:${interval}`).emit(`TICKER:${figi}:${interval}`, data)
-    }
-
-    function subscribeApi({ figi, interval }: { figi: string, interval: CandleResolution }) {
-        console.log(`SOCKET subsribe API ${figi} ${interval}`)
-        try {
-            _subscribe({ figi, _id: figi, interval }, handlePriceUpdated)
-        } catch (error) {
-            console.error(error);
-        }
-    }
-
     io.on('connection', (socket: Socket) => {
-        socket.on('subscribe', (data) => {
+        socket.on('candle:subscribe', (data: { figi: string, interval: CandleResolution }) => {
             console.log('SOCKET subscribe', data)
-            subscribe(socket, data)
+            const room_name = `candle:${data.figi}:${data.interval}`
+            socket.join(room_name)
+            const candle = getLastCandle(room_name)
+            if (candle) {
+                socket.emit(room_name, candle)
+            }
         })
-        socket.on('unsubscribe', (data) => {
+        socket.on('candle:unsubscribe', (data: { figi: string, interval: CandleResolution }) => {
             console.log('SOCKET unsubscribe', data.figi)
-            unsubscribe(socket, data)
+            const room_name = `candle:${data.figi}:${data.interval}`
+            socket.leave(room_name)
+        })
+        socket.on('orderbook:subscribe', (data: { figi: string, depth: Depth }) => {
+            const room_name = `orderbook:${data.figi}:${data.depth}`
+            socket.join(room_name)
+        })
+        socket.on('orderbook:unsubscribe', (data: { figi: string, depth: Depth }) => {
+            const room_name = `orderbook:${data.figi}:${data.depth}`
+            socket.leave(room_name)
         })
         console.log('Connection work!')
     })
 
+    const orderbookSubscribers = {}
+    const candleSubscribers = {}
+
     io.of("/").adapter
-        .on("create-room", (room: string) => {
-            const [figi, interval] = room.split(':')
-            if (isCandleResolution(interval)) {
-                console.log(`SOCKET room ${room} was created`);
-                subscribeApi({ figi, interval })
+        .on("create-room", (room_name: string) => {
+            const [type, figi, param] = room_name.split(':')
+            switch (type) {
+                case "candle":
+                    if (figi && param && isCandleResolution(param)) {
+                        console.log(`SOCKET room ${room_name} was created`);
+                        candleSubscribers[room_name] = api.candle({ figi, interval: param }, (x: CandleStreaming) => {
+                            setLastCandle(room_name, x)
+                            io.to(room_name).emit(room_name, x)
+                        })
+                    }
+                    break;
+                case "orderbook":
+                    if (figi && param) {
+                        const depth = parseInt(param)
+                        if (isDepth(depth)) {
+                            orderbookSubscribers[room_name] = api.orderbook({ figi, depth }, (x: OrderbookStreaming) => {
+                                io.to(room_name).emit(room_name, x)
+                            })
+                        }
+                    }
+                    break;
+                default:
+                    break;
             }
+
         })
-        .on("delete-room", (room: string) => {
-            const [figi, interval] = room.split(':')
-            if (isCandleResolution(interval)) {
-                console.log(`SOCKET room ${room} was deleted`);
-                unsubscribeApi({ figi, interval })
+        .on("delete-room", (room_name: string) => {
+            const [type, figi, param] = room_name.split(':')
+
+            switch (type) {
+                case "candle":
+                    if (figi && param && isCandleResolution(param)) {
+                        console.log(`SOCKET room ${room_name} was deleted`);
+                        candleSubscribers[room_name]()
+                        delete candleSubscribers[room_name]
+                    }
+                    break
+                case "orderbook":
+                    if (figi && param) {
+                        orderbookSubscribers[room_name]
+                        delete orderbookSubscribers[room_name]
+                    }
+                    break
+                default:
+                    break
             }
+
         })
         .on("join-room", (room: string, id) => {
             //console.log(`socket ${id} has joined room ${room}`);
@@ -55,50 +91,25 @@ export default function SocketConfig(io: Server) {
         });
 }
 
-function getLastData({ figi, interval }: { figi: string, interval: CandleResolution }) {
-    if (!last_data[figi]) return
-    if (!last_data[figi][interval]) return
-    return last_data[figi][interval]
+function getLastCandle(name: string): CandleStreaming | undefined {
+    return last_candles[name]
 }
 
-function setLastData({ figi, interval, data }: { figi: string, interval: CandleResolution, data: CandleStreaming }) {
-    if (!last_data[figi]) last_data[figi] = {}
-    last_data[figi][interval] = data
-}
-
-function subscribe(socket: Socket, { figi, interval }: { figi: string, interval: CandleResolution }) {
-    const room_name = `${figi}:${interval}`
-    socket.join(room_name)
-
-    const data = getLastData({ figi, interval })
-    if (data) {
-        socket.emit(`TICKER:${figi}:${interval}`, data)
-    }
-}
-
-function unsubscribe(socket: Socket, { figi, interval }: { figi: string, interval: CandleResolution }) {
-    const room_name = `${figi}:${interval}`
-    socket.leave(room_name)
+function setLastCandle(name: string, x: CandleStreaming) {
+    last_candles[name] = x
 }
 
 type TickerDataIndex = {
-    [id: string]: {
-        [interval in CandleResolution]?: CandleStreaming
-    }
+    [id: string]: CandleStreaming
 }
 
-const last_data: TickerDataIndex = {}
+const last_candles: TickerDataIndex = {}
 
 function isCandleResolution(interval: string): interval is CandleResolution {
     if (!interval) return false
     return true
 }
-
-function unsubscribeApi({ figi, interval }: { figi: string, interval: CandleResolution }) {
-    console.log(`SOCKET unsubsribe API ${figi} ${interval}`);
-    try {
-        _unsubscribe({ figi, _id: figi, interval })
-    } catch (error) {
-        console.error('SOCKET', error);
-    }
+function isDepth(depth: number): depth is Depth {
+    if (!depth) return false
+    return true
 }
