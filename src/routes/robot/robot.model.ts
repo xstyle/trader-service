@@ -1,8 +1,7 @@
-import { Candle, CandleResolution, FIGI, LimitOrderRequest, Order as OrderType } from '@tinkoff/invest-openapi-js-sdk'
+import { CandleResolution, CandleStreaming, FIGI, LimitOrderRequest, Order as OrderType } from '@tinkoff/invest-openapi-js-sdk'
 import mongoose, { Document, Model, Schema, Types } from 'mongoose'
 import { Locker } from '../../utils/Locker'
 import api from '../../utils/openapi'
-import { isSubscribed, subscribe, unsubscribe } from '../../utils/subscribes-manager'
 import bot from '../../utils/telegram'
 import { LimitOrderDocument, model as Order } from "../order/order.model"
 
@@ -569,18 +568,21 @@ const INTERVAL_1_MIN: CandleResolution = '1min'
 RobotSchema.methods.disable = async function () {
     this.is_enabled = false
     await this.save()
-    if (isSubscribed({ figi: this.figi, _id: this._id, interval: INTERVAL_1_MIN })) {
-        unsubscribe({ figi: this.figi, _id: this._id, interval: INTERVAL_1_MIN })
+    if (subscribers[this._id]) {
+        subscribers[this._id]()
+        delete subscribers[this._id]
     }
 }
+
+const subscribers = {}
 
 RobotSchema.methods.enable = async function () {
     const robot = await model.getRobotById(this._id)
     robot.is_enabled = true
     await robot.save()
-    if (!isSubscribed({ figi: robot.figi, _id: robot._id, interval: INTERVAL_1_MIN })) {
+    if (!subscribers[this._id]) {
         console.log('Robot has subscribed')
-        subscribe({ figi: robot.figi, _id: robot._id, interval: INTERVAL_1_MIN }, async (data: Candle) => {
+        subscribers[this._id] = api.candle({ figi: robot.figi, interval: INTERVAL_1_MIN }, async (data: CandleStreaming) => {
             const { c: price, v: value } = data
             try {
                 await robot.priceWasUpdated(price, value)

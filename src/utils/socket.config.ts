@@ -1,6 +1,7 @@
 import { CandleResolution, CandleStreaming, Depth, OrderbookStreaming } from "@tinkoff/invest-openapi-js-sdk";
 import { Server, Socket } from "socket.io";
 import api from "./openapi";
+import { safeSubscribeCandle } from "./subscribes-manager";
 
 export default function SocketConfig(io: Server) {
 
@@ -34,16 +35,20 @@ export default function SocketConfig(io: Server) {
     const candleSubscribers = {}
 
     io.of("/").adapter
-        .on("create-room", (room_name: string) => {
+        .on("create-room", async (room_name: string) => {
             const [type, figi, param] = room_name.split(':')
             switch (type) {
                 case "candle":
                     if (figi && param && isCandleResolution(param)) {
                         console.log(`SOCKET room ${room_name} was created`);
-                        candleSubscribers[room_name] = api.candle({ figi, interval: param }, (x: CandleStreaming) => {
-                            setLastCandle(room_name, x)
-                            io.to(room_name).emit(room_name, x)
-                        })
+                        try {
+                            candleSubscribers[room_name] = await safeSubscribeCandle({ figi, interval: param }, (x: CandleStreaming) => {
+                                setLastCandle(room_name, x)
+                                io.to(room_name).emit(room_name, x)
+                            })
+                        } catch (error) {
+                            console.error('Error subscribe instrument')
+                        }
                     }
                     break;
                 case "orderbook":

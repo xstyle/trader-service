@@ -1,6 +1,6 @@
 import { Candle, CandleStreaming } from '@tinkoff/invest-openapi-js-sdk'
 import mongoose, { Document, Model, Schema } from 'mongoose'
-import { subscribe, unsubscribe } from '../../utils/subscribes-manager'
+import api from '../../utils/openapi'
 import bot from '../../utils/telegram'
 import { model as Ticker } from '../ticker/ticker.model'
 
@@ -54,12 +54,10 @@ WatchdogSchema.methods.run = async function (this: WatchDogDocument): Promise<vo
     const { figi, _id } = this
     const ticker = await Ticker.getOrCreateTickerByFigiOrTicker(figi)
     if (subscribers[figi]) return console.log(`WatchDog $${ticker.ticker} Already work!`)
-    subscribers[figi] = true
-    subscribe({
-        _id,
+    subscribers[this._id] = api.candle({
         figi,
         interval: '1min'
-    }, (data) => {
+    }, (data: CandleStreaming) => {
         this.handleChangePrice(data)
     })
 
@@ -71,13 +69,9 @@ WatchdogSchema.methods.run = async function (this: WatchDogDocument): Promise<vo
 WatchdogSchema.methods.stop = async function (this: WatchDogDocument): Promise<void> {
     const { figi, _id } = this
     const ticker = await Ticker.getOrCreateTickerByFigiOrTicker(figi)
-    if (!subscribers[figi]) return console.log(`Watchdog $${ticker.ticker} Already was stopped!`)
-    subscribers[figi] = false
-    unsubscribe({
-        _id,
-        figi,
-        interval: '1min'
-    })
+    if (!subscribers[this._id]) return console.log(`Watchdog $${ticker.ticker} Already was stopped!`)
+    subscribers[this._id]()
+    delete subscribers[this._id]
 
     this.is_enabled = false
     await this.save()

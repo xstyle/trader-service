@@ -2,13 +2,11 @@ import { PortfolioPosition } from "@tinkoff/invest-openapi-js-sdk"
 import { RequestHandler } from "express"
 import { LeanDocument } from "mongoose"
 import api from '../../utils/openapi'
-import { isSubscribed, unsubscribe } from "../../utils/subscribes-manager"
 import bot from '../../utils/telegram'
 import { model as Order } from "../order/order.model"
 import { model as State } from '../state/state.model'
 import { model as Ticker } from '../ticker/ticker.model'
 import { model as Robot, Robot as RobotType, RobotDocument } from "./robot.model"
-import { job } from "./robot.service"
 
 const TELEGRAM_ID: string = process.env.TELEGRAM_ID || ""
 
@@ -229,13 +227,7 @@ export async function stopRobots() {
     const robots = await Robot.find({ is_enabled: { $exists: true } })
     console.log(`Down ${robots.length} robots`)
     for (const robot of robots) {
-        if (isSubscribed({ figi: robot.figi, _id: robot._id, interval: "1min" })) {
-            unsubscribe({
-                figi: robot.figi,
-                _id: robot._id,
-                interval: '1min'
-            })
-        }
+        await robot.disable()
     }
     try {
         bot.telegram.sendMessage(TELEGRAM_ID, `${robots.length} robots have been stopped`)
