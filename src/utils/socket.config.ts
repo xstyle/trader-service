@@ -73,8 +73,12 @@ export default function SocketConfig(io: Server) {
                 case "candle":
                     if (figi && param && isCandleResolution(param)) {
                         console.log(`SOCKET room ${room_name} was deleted`);
-                        candleSubscribers[room_name]()
-                        delete candleSubscribers[room_name]
+                        if (candleSubscribers[room_name]) {
+                            candleSubscribers[room_name]()
+                            delete candleSubscribers[room_name]
+                        } else {
+                            console.error('Subscriber not found')
+                        }
                     }
                     break
                 case "orderbook":
