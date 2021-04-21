@@ -12,7 +12,7 @@ export const index: RequestHandler<{}, TickerDocument[], undefined, { figi?: str
     const query = Ticker.find().sort({ ticker: 1 })
 
     if (figi) {
-        query.where({figi})
+        query.where({ figi })
     }
 
     res.send(await query)
@@ -40,10 +40,10 @@ export const candles: RequestHandler = async (req, res, next) => {
     const from = moment()
     switch (interval) {
         case 'month':
-            from.add(-10, 'y')
+            from.add(-10 * 365, 'd')
             break
         case 'week':
-            from.add(-2, 'y')
+            from.add(-2 * 365, 'd')
             break
         case 'day':
             from.add(-365, 'd')
@@ -52,9 +52,9 @@ export const candles: RequestHandler = async (req, res, next) => {
             from.add(-7, 'd')
             break
         case '1min':
-        case '2min':      
-        case '3min':      
-        case '5min':    
+        case '2min':
+        case '3min':
+        case '5min':
             from.add(-1, 'd')
             break
         default:
@@ -73,6 +73,7 @@ export const candles: RequestHandler = async (req, res, next) => {
         const data = await api.candlesGet(request)
         res.send(data)
     } catch (error) {
+        console.error(request)
         next(error)
     }
 }
@@ -117,6 +118,46 @@ export const price: RequestHandler<{}, {}, {}, { date: string, interval: CandleR
     }
 }
 
+export const getPreviousDayCandle: RequestHandler<{}, {}, {}, { days_shift: string }, { ticker: TickerDocument }> = async (req, res, next) => {
+    const { days_shift } = req.query
+    const { ticker } = res.locals
+
+    const from = moment().add(days_shift, 'd').startOf('day')
+    const to = from.clone().endOf('day')
+
+    const request: {
+        from: string;
+        to: string;
+        figi: string;
+        interval: CandleResolution;
+    } = {
+        figi: ticker.figi,
+        from: from.toISOString(),
+        to: to.toISOString(),
+        interval: "day"
+    }
+
+    try {
+        let data
+        let attempt = 0
+        do {
+            attempt++
+            data = await api.candlesGet(request)
+            if (!data.candles.length) {
+                request.from = from.add(-1, 'day').toISOString()
+                request.to = to.add(-1, 'day').toISOString()
+            }
+
+            if (attempt > 10) {
+                console.error(`Too mach request`)
+                break
+            }
+        } while (!data.candles.length)
+        res.send(data)
+    } catch (error) {
+        next(error)
+    }
+}
 
 function getFromToDates(date: string, interval: CandleResolution) {
     const time = moment(date)
@@ -129,7 +170,7 @@ function getFromToDates(date: string, interval: CandleResolution) {
             break;
         case 'day':
             return {
-                from: time.startOf('day').add(10, 'h'),
+                from: time.startOf('day'),
                 to: time.clone().add(1, 'day')
             }
             break;
