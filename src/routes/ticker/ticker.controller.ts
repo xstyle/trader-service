@@ -122,7 +122,7 @@ export const getPreviousDayCandle: RequestHandler<{}, {}, {}, { days_shift: stri
     const { days_shift } = req.query
     const { ticker } = res.locals
 
-    const from = moment().add(days_shift, 'd').startOf('day')
+    const from = moment().add(-6, 'hour').add(days_shift, 'd').startOf('day')
     const to = from.clone().endOf('day')
 
     const request: {
