@@ -37,7 +37,10 @@ export const candles: RequestHandler = async (req, res, next) => {
     } = req.query as { interval: CandleResolution }
 
     const { ticker } = res.locals
-    const from = moment()
+    const to = moment()
+    const from = to.clone()
+    
+
     switch (interval) {
         case 'month':
             from.add(-10 * 365, 'd')
@@ -65,7 +68,7 @@ export const candles: RequestHandler = async (req, res, next) => {
     const request = {
         figi: ticker.figi,
         from: from.toISOString(),
-        to: moment().toISOString(),
+        to: to.toISOString(),
         interval
     }
 
