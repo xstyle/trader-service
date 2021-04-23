@@ -83,20 +83,22 @@ export default function SocketConfig(io: Server) {
                     break
                 case "orderbook":
                     if (figi && param) {
-                        orderbookSubscribers[room_name]
-                        delete orderbookSubscribers[room_name]
+                        console.log(`SOCKET room ${room_name} was deleted`);
+                        if (orderbookSubscribers[room_name]) {
+                            orderbookSubscribers[room_name]()
+                            delete orderbookSubscribers[room_name]
+                        }
                     }
                     break
                 default:
                     break
             }
-
         })
         .on("join-room", (room: string, id) => {
-            //console.log(`socket ${id} has joined room ${room}`);
+            console.log(`socket ${id} has joined room ${room}`);
         })
         .on("leave-room", (room: string, id) => {
-            //console.log(`socket ${id} has leaved room ${room}`);
+            console.log(`socket ${id} has leaved room ${room}`);
         });
 }
 
@@ -108,11 +110,11 @@ function setLastCandle(name: string, x: CandleStreaming) {
     last_candles[name] = x
 }
 
-type TickerDataIndex = {
+type LastCandlesIndex = {
     [id: string]: CandleStreaming
 }
 
-const last_candles: TickerDataIndex = {}
+const last_candles: LastCandlesIndex = {}
 
 function isCandleResolution(interval: string): interval is CandleResolution {
     if (!interval) return false
