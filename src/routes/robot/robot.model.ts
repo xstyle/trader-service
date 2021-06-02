@@ -102,8 +102,8 @@ const RobotSchema = new Schema<RobotDocument, RobotModel>({
         enum: ['stepper']
     }
 }, {
-    toJSON: { getters: true, virtuals: false },
-    toObject: { getters: true, virtuals: false },
+    toJSON: { getters: true, virtuals: true },
+    toObject: { getters: true, virtuals: true },
 })
 
 export interface Robot {
@@ -173,11 +173,15 @@ RobotSchema.path('price_for_placing_sell_order').get(function (this: RobotDocume
     return this.sell_price
 })
 
+RobotSchema.virtual('is_locked').get(function () {
+    return robot_locker.isLocked(this._id) ?? false
+})
+
 const order_check_locker = new Locker()
 const force_order_check_locker = new Locker()
+const robot_locker: Locker = new Locker()
 
 RobotSchema.methods.priceWasUpdated = async function (
-    this: RobotDocument,
     price: number,
     value: number
 ): Promise<void> {
@@ -384,8 +388,6 @@ RobotSchema.methods.cancelAllOrders = async function (): Promise<void> {
     console.log(`[${this._id}] ${this.ticker} Все ордера отменены`)
     await this.save()
 }
-
-const robot_locker: Locker = new Locker()
 
 function logRobotState(instrument: RobotDocument) {
     return `${instrument.ticker} State [${instrument._id}]. Shares numbers [${instrument.min_shares_number}, ${instrument.shares_number}, ${instrument.max_shares_number}].`

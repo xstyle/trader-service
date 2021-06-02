@@ -30,7 +30,7 @@ export const index: RequestHandler<{}, LeanDocument<RobotDocument>[], undefined>
 
     res.send(robots.map(robot => {
         robot = Robot.getRobotByIdSync(robot._id) || robot
-        return robot.toObject()
+        return robot.toJSON()
     }))
 }
 
