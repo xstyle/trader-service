@@ -176,15 +176,20 @@ RobotSchema.path('price_for_placing_sell_order').get(function (this: RobotDocume
 RobotSchema.virtual('is_locked').get(function () {
     return robot_locker.isLocked(this._id) ?? false
 })
+RobotSchema.virtual('price_was_updated_at').get(function () {
+    return price_was_updated_at[this._id]
+})
 
 const order_check_locker = new Locker()
 const force_order_check_locker = new Locker()
 const robot_locker: Locker = new Locker()
+const price_was_updated_at: { [id: string]: Date } = {}
 
 RobotSchema.methods.priceWasUpdated = async function (
     price: number,
     value: number
 ): Promise<void> {
+    price_was_updated_at[this._id] = new Date()
     if (this.price_for_placing_buy_order >= price) {
         if (this.shares_number < this.max_shares_number) {
             // Все указывает на то что нужно покупать
