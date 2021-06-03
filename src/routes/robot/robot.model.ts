@@ -7,7 +7,8 @@ import { LimitOrderDocument, model as Order } from "../order/order.model"
 
 export const model_name = 'Robot'
 
-const TELEGRAM_ID: string = process.env.TELEGRAM_ID || ""
+const TELEGRAM_ID: string = process.env.TELEGRAM_ID || ''
+const HOSTNAME: string = process.env.HOSTNAME || ''
 
 const RobotSchema = new Schema<RobotDocument, RobotModel>({
     figi: {
@@ -230,7 +231,7 @@ RobotSchema.methods.onBuyShares = async function (number, price) {
     this.budget = round(this.budget - sum)
     console.log(`[${this._id}] ${this.ticker} onBuyShares() { this.lot = ${this.lot}; shares_number = ${shares_number}; sum = ${sum}; this.shares_number = ${this.shares_number}; this.budget = ${this.budget}}`)
     try {
-        bot.telegram.sendMessage(TELEGRAM_ID, `[${this.ticker}](http://ubuntu.lan:3000/instrument/${this._id}) have bought ${number} lots at ${price}$ for ${sum}$. [app](https://www.tinkoff.ru/invest/stocks/${this.ticker})`, { parse_mode: "Markdown", disable_web_page_preview: true })
+        bot.telegram.sendMessage(TELEGRAM_ID, `[${this.ticker}](http://${HOSTNAME}:3000/robot/${this._id}) have bought ${number} lots at ${price}$ for ${sum}$. [app](https://www.tinkoff.ru/invest/stocks/${this.ticker})`, { parse_mode: "Markdown", disable_web_page_preview: true })
     } catch (error) {
 
     }
@@ -250,7 +251,7 @@ RobotSchema.methods.onSellShares = async function (
     this.budget = round(this.budget + sum)
 
     try {
-        bot.telegram.sendMessage(TELEGRAM_ID, `[${this.ticker}](http://ubuntu.lan:3000/instrument/${this._id}) have sold ${number} lots at ${price}$ for ${sum}$. [app](https://www.tinkoff.ru/invest/stocks/${this.ticker})`, { parse_mode: "Markdown", disable_web_page_preview: true })
+        bot.telegram.sendMessage(TELEGRAM_ID, `[${this.ticker}](http://${HOSTNAME}:3000/robot/${this._id}) have sold ${number} lots at ${price}$ for ${sum}$. [app](https://www.tinkoff.ru/invest/stocks/${this.ticker})`, { parse_mode: "Markdown", disable_web_page_preview: true })
     } catch (error) {
     }
 
@@ -274,7 +275,7 @@ async function getOrdersAmount(_id: Types.ObjectId): Promise<[number, number]> {
 RobotSchema.methods.onAllSellShares = async function () {
     if (this.stop_after_sell) {
         await this.disable()
-        bot.telegram.sendMessage(TELEGRAM_ID, `[${this.ticker}](http://ubuntu.lan:3000/instrument/${this._id}) has been disabled after all stocks were sold.`, { parse_mode: "Markdown" })
+        bot.telegram.sendMessage(TELEGRAM_ID, `[${this.ticker}](http://${HOSTNAME}:3000/robot/${this._id}) has been disabled after all stocks were sold.`, { parse_mode: "Markdown" })
     }
     if (this.strategy == 'stepper') {
         const [sell, buy] = await getOrdersAmount(this._id)
@@ -289,7 +290,7 @@ RobotSchema.methods.onAllSellShares = async function () {
 RobotSchema.methods.onAllBuyShares = async function () {
     if (this.stop_after_buy) {
         await this.disable()
-        bot.telegram.sendMessage(TELEGRAM_ID, `[${this.ticker}](http://ubuntu.lan:3000/instrument/${this._id}) has been disabled after all stoks were purchased.`, { parse_mode: "Markdown" })
+        bot.telegram.sendMessage(TELEGRAM_ID, `[${this.ticker}](http://${HOSTNAME}:3000/robot/${this._id}) has been disabled after all stoks were purchased.`, { parse_mode: "Markdown" })
     }
     if (this.strategy == 'stepper') {
         const [sell, buy] = await getOrdersAmount(this._id)
@@ -394,8 +395,8 @@ RobotSchema.methods.cancelAllOrders = async function (): Promise<void> {
     await this.save()
 }
 
-function logRobotState(instrument: RobotDocument) {
-    return `${instrument.ticker} State [${instrument._id}]. Shares numbers [${instrument.min_shares_number}, ${instrument.shares_number}, ${instrument.max_shares_number}].`
+function logRobotState(robot: RobotDocument) {
+    return `${robot.ticker} State [${robot._id}]. Shares numbers [${robot.min_shares_number}, ${robot.shares_number}, ${robot.max_shares_number}].`
 }
 
 /**
@@ -459,7 +460,7 @@ RobotSchema.methods.needBuy = async function (lots: number) {
     try {
         const order = await api.limitOrder(request)
         try {
-            bot.telegram.sendMessage(TELEGRAM_ID, `[${this.ticker}](http://ubuntu.lan:3000/instrument/${this._id}) create order for buy ${lots} lots by ${price}. [app](https://www.tinkoff.ru/invest/stocks/${this.ticker})`, { parse_mode: "Markdown", disable_web_page_preview: true })
+            bot.telegram.sendMessage(TELEGRAM_ID, `[${this.ticker}](http://${HOSTNAME}:3000/robot/${this._id}) create order for buy ${lots} lots by ${price}. [app](https://www.tinkoff.ru/invest/stocks/${this.ticker})`, { parse_mode: "Markdown", disable_web_page_preview: true })
         } catch (err) {
         }
 
@@ -539,7 +540,7 @@ RobotSchema.methods.needSell = async function (lots: number) {
     try {
         const order = await api.limitOrder(request)
         try {
-            bot.telegram.sendMessage(TELEGRAM_ID, `[${this.ticker}](http://ubuntu.lan:3000/instrument/${this._id}) create order for sell ${lots} lots by ${price}$. [app](https://www.tinkoff.ru/invest/stocks/${this.ticker})`, { parse_mode: "Markdown", disable_web_page_preview: true })
+            bot.telegram.sendMessage(TELEGRAM_ID, `[${this.ticker}](http://${HOSTNAME}:3000/robot/${this._id}) create order for sell ${lots} lots by ${price}$. [app](https://www.tinkoff.ru/invest/stocks/${this.ticker})`, { parse_mode: "Markdown", disable_web_page_preview: true })
         } catch (err) {
         }
 
