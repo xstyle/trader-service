@@ -1,6 +1,5 @@
 import mongoose, { Document, Model, Schema } from 'mongoose'
-import { runRobots, stopRobots } from '../robot/robot.controller'
-
+import { model as Robot } from '../robot/robot.model'
 export const model_name = 'State'
 
 const StateSchema = new Schema<StateDocument, StateModel>({
@@ -26,19 +25,19 @@ interface StateModel extends Model<StateDocument> {
 StateSchema.statics.getState = async function (this: StateModel): Promise<StateDocument> {
     const state = await this.findOne().exec()
     if (state) return state
-    return this.create({is_running: false})
+    return this.create({ is_running: false })
 }
 
 StateSchema.methods.stop = async function (this: StateDocument): Promise<StateDocument> {
     this.is_running = false
 
-    await stopRobots()
+    await Robot.stopRobots()
     return this.save()
 }
 
 StateSchema.methods.run = async function (this: StateDocument): Promise<StateDocument> {
     this.is_running = true
-    await runRobots()
+    await Robot.runRobots()
     return this.save()
 }
 

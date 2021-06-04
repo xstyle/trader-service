@@ -1,7 +1,6 @@
 import { RequestHandler } from 'express'
-
 import bot from '../../utils/telegram'
-import { runRobots } from '../robot/robot.controller'
+import { model as Robot } from '../robot/robot.model'
 import { model as State } from './state.model'
 
 export const index: RequestHandler = async (req, res, next) => {
@@ -20,15 +19,16 @@ export const update: RequestHandler = async (req, res, next) => {
 }
 
 
-State.getState().then(state => {
-    console.log('App is starting...', state)
-    if (state.is_running) {
-        runRobots()
-        console.log(`Robots has been running automaticaly.`)
-    } else {
-        console.log(`Robots hasn't been running. Because was disabled.`)
-    }
-})
+State.getState()
+    .then(async (state) => {
+        console.log('App is starting...', state)
+        if (state.is_running) {
+            await Robot.runRobots()
+            console.log(`Robots has been running automaticaly.`)
+        } else {
+            console.log(`Robots hasn't been running. Because was disabled.`)
+        }
+    })
 
 bot.command('run', async () => {
     const state = await State.getState()

@@ -4,6 +4,7 @@ import { Locker } from '../../utils/Locker'
 import api from '../../utils/openapi'
 import bot from '../../utils/telegram'
 import { LimitOrderDocument, model as Order } from "../order/order.model"
+import { model as State } from "../state/state.model"
 
 export const model_name = 'Robot'
 
@@ -157,6 +158,8 @@ export interface RobotDocument extends Robot, Document {
 }
 
 export interface RobotModel extends Model<RobotDocument> {
+    runRobots(): Promise<void>
+    stopRobots(): Promise<void>
     getRobotById(_id: string): Promise<RobotDocument>
     getRobotByIdSync: (_id: string) => RobotDocument | undefined
     isLoaded(_id: string): boolean
@@ -589,6 +592,9 @@ RobotSchema.methods.unsubscribe = function () {
 }
 
 RobotSchema.methods.subscribe = async function () {
+    const state = await State.getState()
+    if (!state.is_running) return
+
     if (!subscribers[this._id]) {
         const robot = await model.getRobotById(this._id)
         console.log('Robot has subscribed')
@@ -631,6 +637,32 @@ RobotSchema.statics.getRobotByIdSync = function (_id: string) {
 
 RobotSchema.statics.isLoaded = function (_id: string) {
     return !!robots_index[_id]
+}
+
+RobotSchema.statics.runRobots = async function () {
+    const robots = await model.find({ is_enabled: true }, '_id')
+    console.log(`Setup ${robots.length} robots`)
+    for (const robot of robots) {
+        await robot.subscribe()
+    }
+    try {
+        bot.telegram.sendMessage(TELEGRAM_ID, `${robots.length} robots have been started`)
+    } catch (error) {
+
+    }
+}
+
+RobotSchema.statics.stopRobots = async function () {
+    const robots = await model.find({ is_enabled: { $exists: true } })
+    console.log(`Down ${robots.length} robots`)
+    for (const robot of robots) {
+        robot.unsubscribe()
+    }
+    try {
+        bot.telegram.sendMessage(TELEGRAM_ID, `${robots.length} robots have been stopped`)
+    } catch (error) {
+
+    }
 }
 
 export const model = mongoose.model<RobotDocument, RobotModel>(model_name, RobotSchema)

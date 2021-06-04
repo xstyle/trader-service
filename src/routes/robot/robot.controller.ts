@@ -2,13 +2,10 @@ import { PortfolioPosition } from "@tinkoff/invest-openapi-js-sdk"
 import { RequestHandler } from "express"
 import { LeanDocument } from "mongoose"
 import api from '../../utils/openapi'
-import bot from '../../utils/telegram'
 import { model as Order } from "../order/order.model"
 import { model as State } from '../state/state.model'
 import { model as Ticker } from '../ticker/ticker.model'
 import { model as Robot, Robot as RobotType, RobotDocument } from "./robot.model"
-
-const TELEGRAM_ID: string = process.env.TELEGRAM_ID || ""
 
 export const index: RequestHandler<{}, LeanDocument<RobotDocument>[], undefined> = async (req, res, next) => {
     const {
@@ -207,31 +204,5 @@ export const portfolio: RequestHandler = async (req, res, next) => {
         res.send(positions)
     } catch (error) {
         next(error)
-    }
-}
-
-export async function runRobots() {
-    const robots = await Robot.find({ is_enabled: true }, '_id')
-    console.log(`Setup ${robots.length} robots`)
-    for (const robot of robots) {
-        await robot.enable()
-    }
-    try {
-        bot.telegram.sendMessage(TELEGRAM_ID, `${robots.length} robots have been started`)
-    } catch (error) {
-
-    }
-}
-
-export async function stopRobots() {
-    const robots = await Robot.find({ is_enabled: { $exists: true } })
-    console.log(`Down ${robots.length} robots`)
-    for (const robot of robots) {
-        await robot.disable()
-    }
-    try {
-        bot.telegram.sendMessage(TELEGRAM_ID, `${robots.length} robots have been stopped`)
-    } catch (error) {
-
     }
 }
