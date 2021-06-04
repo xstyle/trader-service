@@ -133,6 +133,8 @@ export interface Robot {
 }
 
 export interface RobotDocument extends Robot, Document {
+    subscribe(): Promise<void>
+    unsubscribe(): void
     priceWasUpdated(price: number, value: number): Promise<void>
     onBuyShares(number: number, price: number): Promise<void>
     onSellShares(number: number, price: number): Promise<void>
@@ -576,19 +578,19 @@ const INTERVAL_1_MIN: CandleResolution = '1min'
 RobotSchema.methods.disable = async function () {
     this.is_enabled = false
     await this.save()
+    this.unsubscribe()
+}
+
+RobotSchema.methods.unsubscribe = function () {
     if (subscribers[this._id]) {
         subscribers[this._id]()
         delete subscribers[this._id]
     }
 }
 
-const subscribers = {}
-
-RobotSchema.methods.enable = async function () {
-    const robot = await model.getRobotById(this._id)
-    robot.is_enabled = true
-    await robot.save()
+RobotSchema.methods.subscribe = async function () {
     if (!subscribers[this._id]) {
+        const robot = await model.getRobotById(this._id)
         console.log('Robot has subscribed')
         subscribers[this._id] = api.candle({ figi: robot.figi, interval: INTERVAL_1_MIN }, async (data: CandleStreaming) => {
             const { c: price, v: value } = data
@@ -601,6 +603,15 @@ RobotSchema.methods.enable = async function () {
     } else {
         console.log('Robot is already working.')
     }
+}
+
+const subscribers = {}
+
+RobotSchema.methods.enable = async function () {
+    const robot = await model.getRobotById(this._id)
+    robot.is_enabled = true
+    await robot.save()
+    await robot.subscribe()
 }
 
 type RobotsIndex = { [id: string]: RobotDocument | undefined }
@@ -623,5 +634,3 @@ RobotSchema.statics.isLoaded = function (_id: string) {
 }
 
 export const model = mongoose.model<RobotDocument, RobotModel>(model_name, RobotSchema)
-
-
