@@ -1,6 +1,6 @@
 import { Candle, CandleStreaming } from '@tinkoff/invest-openapi-js-sdk'
 import mongoose, { Document, Model, Schema } from 'mongoose'
-import api from '../../utils/openapi'
+import api, { subscribe } from '../../utils/openapi'
 import bot from '../../utils/telegram'
 import { model as Ticker } from '../ticker/ticker.model'
 
@@ -54,7 +54,7 @@ WatchdogSchema.methods.run = async function (this: WatchDogDocument): Promise<vo
     const { figi, _id } = this
     const ticker = await Ticker.getOrCreateTickerByFigiOrTicker(figi)
     if (subscribers[figi]) return console.log(`WatchDog $${ticker.ticker} Already work!`)
-    subscribers[this._id] = api.candle({
+    subscribers[this._id] = subscribe({
         figi,
         interval: '1min'
     }, (data: CandleStreaming) => {

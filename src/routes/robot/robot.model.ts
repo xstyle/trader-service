@@ -1,7 +1,7 @@
 import { CandleResolution, CandleStreaming, FIGI, LimitOrderRequest, Order as OrderType } from '@tinkoff/invest-openapi-js-sdk'
 import mongoose, { Document, Model, Schema, Types } from 'mongoose'
 import { Locker } from '../../utils/Locker'
-import api from '../../utils/openapi'
+import api, { subscribe } from '../../utils/openapi'
 import bot from '../../utils/telegram'
 import { LimitOrderDocument, model as Order } from "../order/order.model"
 import { model as State } from "../state/state.model"
@@ -598,7 +598,7 @@ RobotSchema.methods.subscribe = async function () {
     if (!subscribers[this._id]) {
         const robot = await model.getRobotById(this._id)
         console.log('Robot has subscribed')
-        subscribers[this._id] = api.candle({ figi: robot.figi, interval: INTERVAL_1_MIN }, async (data: CandleStreaming) => {
+        subscribers[this._id] = subscribe({ figi: robot.figi, interval: INTERVAL_1_MIN }, async (data: CandleStreaming) => {
             const { c: price, v: value } = data
             try {
                 await robot.priceWasUpdated(price, value)

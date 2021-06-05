@@ -1,5 +1,5 @@
-import OpenAPI from '@tinkoff/invest-openapi-js-sdk'
-
+import OpenAPI, { CandleStreaming, CandleStreamingMetaParams, Interval } from '@tinkoff/invest-openapi-js-sdk'
+import { EventEmitter } from 'events'
 const {
     API_TOKEN = "",
     API_URL = "",
@@ -14,3 +14,40 @@ const api = new OpenAPI({
 })
 
 export default api
+
+export const subscribe: ({ figi, interval }: {
+    figi: string;
+    interval?: Interval;
+}, cb: (x: CandleStreaming, metaParams: CandleStreamingMetaParams) => any) => () => void = function ({ figi, interval }, cb) {
+    const eventName = `${figi}-${interval}`
+    if (!emitter.listenerCount(eventName)) {
+        subscribers[eventName] = api.candle({ figi, interval }, (x, metaParams) => {
+            lastCandles[eventName] = {x, metaParams}
+            emitter.emit(eventName, x, metaParams)
+        })
+        console.log('---> Subscribe', eventName);
+        
+    } else {
+        const lastCandle = lastCandles[eventName]
+        if (lastCandle) {
+            cb(lastCandle.x, lastCandle.metaParams)
+        }
+    }
+    emitter.on(eventName, cb)
+    return () => {
+        emitter.off(eventName, cb)
+        if (!emitter.listenerCount(eventName)) {
+            const subscriber = subscribers[eventName]
+            if (!subscriber) return console.log('Error: Subscriber not found.')
+            else console.log('-x-> Unsubscribe', eventName)
+            delete subscribers[eventName]
+            subscriber()
+        }
+    }
+}
+const lastCandles: { [id: string]: { x: CandleStreaming, metaParams: CandleStreamingMetaParams } } = {}
+const subscribers: { [id: string]: () => void } = {}
+
+class Emitter extends EventEmitter { }
+
+const emitter = new Emitter()

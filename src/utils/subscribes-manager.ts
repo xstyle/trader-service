@@ -1,6 +1,6 @@
 import { CandleResolution, CandleStreaming } from "@tinkoff/invest-openapi-js-sdk"
 import { model as Ticker } from "../routes/ticker/ticker.model"
-import api from "./openapi"
+import api, { subscribe } from "./openapi"
 
 
 export async function safeSubscribeCandle({ figi, interval }: { figi: string, interval: CandleResolution }, cb: (x: CandleStreaming) => void): Promise<() => void> {
@@ -11,5 +11,5 @@ export async function safeSubscribeCandle({ figi, interval }: { figi: string, in
         return () => { }
     }
     console.log(`ROBOT Subscribe FIGI ${figi} ${interval}`)
-    return api.candle({ figi, interval }, cb)
+    return subscribe({ figi, interval }, cb)
 }
