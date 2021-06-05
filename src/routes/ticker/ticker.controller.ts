@@ -81,7 +81,7 @@ export const candles: RequestHandler = async (req, res, next) => {
     }
 }
 
-export const loader: RequestHandler = async (req, res, next) => {
+export const loader: RequestHandler<{id: string}> = async (req, res, next) => {
     const { id } = req.params
     try {
         const ticker = await Ticker.getOrCreateTickerByFigiOrTicker(id)

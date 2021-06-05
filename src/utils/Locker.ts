@@ -4,7 +4,7 @@ export class Locker {
         this.state = {};
     }
     isLocked(id: string): boolean {
-        return this.state[id];
+        return this.state[id] ?? false;
     }
     lock(id: string): void {
         this.state[id] = true;

@@ -1,6 +1,6 @@
 import { RequestHandler } from "express"
 
-import { model as Order } from './order.model'
+import { LimitOrderDocument, model as Order } from './order.model'
 
 export const index: RequestHandler = async (req, res, next) => {
     const { collection, figi, start_date, end_date, status } = req.query
@@ -19,8 +19,8 @@ export const index: RequestHandler = async (req, res, next) => {
     res.send(orders)
 }
 
-export const addCollection: RequestHandler = async (req, res, next) => {
-    const { id, date, collection } = req.query as {id: string, date: string, collection: string}
+export const addCollection: RequestHandler<{}, LimitOrderDocument, undefined, { id: string, date: string, collection: string }> = async (req, res, next) => {
+    const { id, date, collection } = req.query
     const order = await Order.findOrCreate(id, date)
     if (order) {
         await order.addCollection(collection)
@@ -36,7 +36,7 @@ export const removeCollection: RequestHandler = async (req, res, next) => {
     return res.send(order)
 }
 
-export const loader: RequestHandler = async (req, res, next) => {
+export const loader: RequestHandler<{ id: string }> = async (req, res, next) => {
     const { id } = req.params
     const order = await Order.findById(id)
     if (order) {
@@ -75,7 +75,7 @@ export const active: RequestHandler = async (req, res, next) => {
     res.send(await api.orders())
 }
 
-export const cancelActiveOrder: RequestHandler = async (req, res, next) => {
+export const cancelActiveOrder: RequestHandler<{ id: string }> = async (req, res, next) => {
     try {
         await api.cancelOrder({ orderId: req.params.id })
         res.sendStatus(200)

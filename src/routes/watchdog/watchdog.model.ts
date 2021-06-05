@@ -83,9 +83,8 @@ WatchdogSchema.methods.handleChangePrice = async function (
     data: Candle
 ) {
     const { figi } = this
-    if (!history[figi]) history[figi] = []
 
-    const log = history[figi]
+    const log = history[figi] ?? (history[figi] = [])
 
     log.push({
         ...data,
@@ -150,7 +149,7 @@ const INTERVAL_5_SECONDS = 5 * 1000
 setInterval(() => {
     const time = Date.now() - INTERVAL_5_SECONDS // 5 секунд
     Object.keys(history).forEach(figi => {
-        history[figi] = history[figi].filter(item => item._time > time)
+        history[figi] = (history[figi] || []).filter(item => item._time > time)
     })
 }, 1000)
 
