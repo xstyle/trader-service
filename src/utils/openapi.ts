@@ -22,11 +22,11 @@ export const subscribe: ({ figi, interval }: {
     const eventName = `${figi}-${interval}`
     if (!emitter.listenerCount(eventName)) {
         subscribers[eventName] = api.candle({ figi, interval }, (x, metaParams) => {
-            lastCandles[eventName] = {x, metaParams}
+            lastCandles[eventName] = { x, metaParams }
             emitter.emit(eventName, x, metaParams)
         })
         console.log('---> Subscribe', eventName);
-        
+
     } else {
         const lastCandle = lastCandles[eventName]
         if (lastCandle) {
@@ -36,13 +36,15 @@ export const subscribe: ({ figi, interval }: {
     emitter.on(eventName, cb)
     return () => {
         emitter.off(eventName, cb)
-        if (!emitter.listenerCount(eventName)) {
-            const subscriber = subscribers[eventName]
-            if (!subscriber) return console.log('Error: Subscriber not found.')
-            else console.log('-x-> Unsubscribe', eventName)
-            delete subscribers[eventName]
-            subscriber()
-        }
+        setTimeout(() => {
+            if (!emitter.listenerCount(eventName)) {
+                const subscriber = subscribers[eventName]
+                if (!subscriber) return console.log('Error: Subscriber not found.')
+                else console.log('-x-> Unsubscribe', eventName)
+                delete subscribers[eventName]
+                subscriber()
+            }
+        }, 5000);
     }
 }
 const lastCandles: { [id: string]: { x: CandleStreaming, metaParams: CandleStreamingMetaParams } } = {}
