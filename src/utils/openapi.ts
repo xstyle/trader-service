@@ -36,7 +36,11 @@ export const subscribe: ({ figi, interval }: {
     emitter.on(eventName, cb)
     return () => {
         emitter.off(eventName, cb)
+        // временная подписка что бы emitter.listenerCount(eventName) не был нулевым, для новых слушателей
+        const tmpCb = () => { }
+        emitter.on(eventName, tmpCb)
         setTimeout(() => {
+            emitter.off(eventName, tmpCb)
             if (!emitter.listenerCount(eventName)) {
                 const subscriber = subscribers[eventName]
                 if (!subscriber) return console.log('Error: Subscriber not found.')
