@@ -215,8 +215,7 @@ LimitOrderSchema.methods.sync = async function (): Promise<LimitOrderDocument> {
             operation.trades &&
             operation.trades.length > 0
         ) ||
-            (this.status == "Decline") ||
-            (this.status == "Done")
+            (this.status == "Decline")
         this.updatedAt = new Date()
 
         return this.save()
@@ -225,7 +224,9 @@ LimitOrderSchema.methods.sync = async function (): Promise<LimitOrderDocument> {
 }
 
 LimitOrderSchema.statics.checkPaymnets = async function () {
-    const operations = await model.find({ status: "Done", payment: 0 })
+    const query = model.find({ status: "Done", isSynced: false })
+    const operations = await query
+    console.log(`Syncing ${operations.length} operations...`)
     for (const operation of operations) {
         await operation.sync()
     }
