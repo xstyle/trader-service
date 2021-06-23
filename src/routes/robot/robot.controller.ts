@@ -76,7 +76,7 @@ export const loader: RequestHandler<{ id: string }, any, any, any, { robot?: Rob
 
 export const sync: RequestHandler<{}, RobotDocument, undefined, {}, { robot: RobotDocument }> = async (req, res, next) => {
     const { robot } = res.locals
-    const orders = await Order.find({ collections: robot._id })
+    const orders = await Order.find({ collections: robot._id, status: "Done" })
 
     const amount = orders.reduce((amount, order) => {
         switch (order.operation) {
@@ -109,7 +109,7 @@ export const sync: RequestHandler<{}, RobotDocument, undefined, {}, { robot: Rob
 
     const budget = orders.reduce((budget, order) => {
         console.log(JSON.stringify(order));
-        budget += order.payment || 0
+        budget += (order.payment || 0)
         if (order.commission) budget += order.commission.value
         return budget
     }, 0)

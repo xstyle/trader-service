@@ -1,6 +1,8 @@
+import { CronJob } from "cron"
 import { RequestHandler } from "express"
-
+import api from '../../utils/openapi'
 import { LimitOrderDocument, model as Order } from './order.model'
+
 
 export const index: RequestHandler = async (req, res, next) => {
     const { collection, figi, start_date, end_date, status } = req.query
@@ -83,6 +85,6 @@ export const cancelActiveOrder: RequestHandler<{ id: string }> = async (req, res
         next(error)
     }
 }
-
-import api from '../../utils/openapi'
-import { Types } from "mongoose"
+const job = new CronJob('12 */10 * * * *', async function () {
+    await Order.checkPaymnets()
+}, null, true, 'Europe/Moscow');

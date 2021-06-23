@@ -117,6 +117,7 @@ interface LimitOrderModel extends Model<LimitOrderDocument> {
     import(id: string, date: string): Promise<LimitOrderDocument>
     createByOperation(operation: Operation): Promise<LimitOrderDocument>
     load(id: string, date: string): Promise<MyOperation | undefined>
+    checkPaymnets(): Promise<void>
 }
 
 LimitOrderSchema.index({ collections: 1 })
@@ -221,6 +222,13 @@ LimitOrderSchema.methods.sync = async function (): Promise<LimitOrderDocument> {
         return this.save()
     }
     return this
+}
+
+LimitOrderSchema.statics.checkPaymnets = async function () {
+    const operations = await model.find({ status: "Done", payment: 0 })
+    for (const operation of operations) {
+        await operation.sync()
+    }
 }
 
 export const model = mongoose.model<LimitOrderDocument, LimitOrderModel>(model_name, LimitOrderSchema)
