@@ -155,6 +155,7 @@ export interface RobotDocument extends Robot, Document {
     needSell(lots: number): Promise<void>
     disable(): Promise<void>
     enable(): Promise<void>
+    getOnlyRobot(): RobotDocument
 }
 
 export interface RobotModel extends Model<RobotDocument> {
@@ -163,6 +164,7 @@ export interface RobotModel extends Model<RobotDocument> {
     getRobotById(_id: string): Promise<RobotDocument>
     getRobotByIdSync: (_id: string) => RobotDocument | undefined
     isLoaded(_id: string): boolean
+    checkOrders(): Promise<void>
 }
 
 RobotSchema.pre('save', function () {
@@ -620,6 +622,12 @@ RobotSchema.methods.enable = async function () {
     await robot.subscribe()
 }
 
+RobotSchema.methods.getOnlyRobot = function () {
+    const robot = model.getRobotByIdSync(this._id)
+    if (!robot) return this
+    return robot
+}
+
 type RobotsIndex = { [id: string]: RobotDocument | undefined }
 
 const robots_index: RobotsIndex = {};
@@ -662,6 +670,13 @@ RobotSchema.statics.stopRobots = async function () {
         bot.telegram.sendMessage(TELEGRAM_ID, `${robots.length} robots have been stopped`)
     } catch (error) {
 
+    }
+}
+
+RobotSchema.statics.checkOrders = async function () {
+    const robots = await model.find({ is_enabled: true })
+    for (const robot of robots) {
+        await robot.getOnlyRobot().checkOrders()
     }
 }
 

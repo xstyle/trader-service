@@ -1,4 +1,5 @@
 import { PortfolioPosition } from "@tinkoff/invest-openapi-js-sdk"
+import { CronJob } from "cron"
 import { RequestHandler } from "express"
 import { LeanDocument } from "mongoose"
 import api from '../../utils/openapi'
@@ -194,15 +195,20 @@ export const remove: RequestHandler<{}, RobotDocument, undefined, {}, { robot: R
 }
 
 let positionsCache: PortfolioPosition[] | undefined;
+
 export const portfolio: RequestHandler = async (req, res, next) => {
     try {
         const positions = positionsCache || (await api.portfolio()).positions;
         if (!positionsCache) {
             positionsCache = positions
-            setTimeout(() => positionsCache = undefined, 1000 * 60 * 30)
+            setTimeout(() => positionsCache = undefined, 1000 * 60 * 5)
         }
         res.send(positions)
     } catch (error) {
         next(error)
     }
 }
+
+const job = new CronJob('33 */10 * * * *', async function() {
+  await Robot.checkOrders()
+}, null, true, 'Europe/Moscow');
