@@ -209,7 +209,7 @@ LimitOrderSchema.methods.sync = async function (): Promise<LimitOrderDocument> {
         this.currency = operation.currency
         this.trades = operation.trades as Types.Array<OperationTrade>
         this.isSynced = (
-            operation.payment > 0 &&
+            operation.payment &&
             operation.commission &&
             operation.commission.value &&
             operation.trades &&
