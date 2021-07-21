@@ -22,6 +22,10 @@ const DaggerCatcherSchema = new Schema<DaggerCatcherDocument, DaggerCatcherModel
         type: Boolean,
         required: true,
         default: false
+    },
+    is_hidden: {
+        type: Boolean,
+        default: false
     }
 })
 
@@ -55,6 +59,7 @@ export interface DaggerCatcherType {
     min: number;
     max: number;
     is_pinned: boolean;
+    is_hidden: boolean;
 }
 
 export interface DaggerCatcherDocument extends DaggerCatcherType, Document {

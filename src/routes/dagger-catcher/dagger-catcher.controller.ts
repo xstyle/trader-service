@@ -2,9 +2,13 @@ import { OperationType, PlacedLimitOrder } from '@tinkoff/invest-openapi-js-sdk'
 import { RequestHandler } from 'express'
 import { DaggerCatcherDocument, DaggerCatcherType, model as DaggerCatcher } from './dagger-catcher.model'
 
-export const index: RequestHandler<{}, DaggerCatcherDocument[]> = async (req, res, next) => {
-    const daggerCatchers = await DaggerCatcher.find().sort({ is_pinned: -1 })
-    return res.send(daggerCatchers)
+export const index: RequestHandler<{}, DaggerCatcherDocument[], undefined, { is_hidden?: "true" | "false" }> = async (req, res, next) => {
+    const { is_hidden } = req.query
+    const daggerCatchers = DaggerCatcher.find().sort({ is_pinned: -1 })
+    if (is_hidden) {
+        daggerCatchers.where({ is_hidden: is_hidden === "true" })
+    }
+    return res.send(await daggerCatchers)
 }
 
 export const show: RequestHandler<{}, DaggerCatcherDocument, {}, {}, { daggerCatcher: DaggerCatcherDocument }> = async (req, res, next) => {
@@ -31,6 +35,7 @@ export const update: RequestHandler<{}, DaggerCatcherDocument, DaggerCatcherType
     daggerCatcher.figi = body.figi
     daggerCatcher.min = body.min
     daggerCatcher.max = body.max
+    daggerCatcher.is_hidden = body.is_hidden
 
     res.send(await daggerCatcher.save())
 }
