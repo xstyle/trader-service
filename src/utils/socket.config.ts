@@ -43,7 +43,7 @@ export default function SocketConfig(io: Server) {
                         console.log(`SOCKET room ${room_name} was created`);
                         try {
                             candleSubscribers[room_name] = await safeSubscribeCandle({ figi, interval: param }, (x: CandleStreaming) => {
-                                setLastCandle(room_name, x)
+                                if (!setLastCandle(room_name, x)) return
                                 io.to(room_name).emit(room_name, x)
                             })
                         } catch (error) {
@@ -106,8 +106,10 @@ function getLastCandle(name: string): CandleStreaming | undefined {
     return last_candles[name]
 }
 
-function setLastCandle(name: string, x: CandleStreaming) {
+function setLastCandle(name: string, x: CandleStreaming): boolean {
+    if (last_candles[name]?.v === x.v) return false
     last_candles[name] = x
+    return true
 }
 
 type LastCandlesIndex = {
