@@ -8,6 +8,7 @@ import Order from "./order"
 import State from "./state"
 import Ticker from "./ticker"
 import Watchdog from "./watchdog"
+import Comment from "./comment"
 
 const router = express.Router()
 
@@ -20,6 +21,8 @@ router.use('/list', List)
 router.use('/watchdog', Watchdog)
 router.use('/dagger-catcher', DaggerCatcher)
 router.use('/history', History)
+router.use('/history', History)
+router.use('/comment', Comment)
 
 router.get('/', (req, res, next) => {
     res.sendStatus(200)
